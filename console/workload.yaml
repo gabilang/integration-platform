@@ -1,0 +1,9 @@
+apiVersion: openchoreo.dev/v1alpha1
+
+metadata:
+  name: devant-console
+
+endpoints:
+  - name: devant-console-http
+    port: 80
+    type: HTTP
