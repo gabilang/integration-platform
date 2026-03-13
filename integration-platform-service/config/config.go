@@ -7,9 +7,11 @@ type Config struct {
 
 	CORSAllowedOrigins string
 
-	OpenChoreo OpenChoreoConfig
+	PlatformAPI PlatformAPIConfig
 }
 
-type OpenChoreoConfig struct {
+// PlatformAPIConfig holds connection settings for the platform-api-service,
+// which acts as the API gateway to the OpenChoreo control plane.
+type PlatformAPIConfig struct {
 	BaseURL string
 }

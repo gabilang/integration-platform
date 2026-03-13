@@ -5,6 +5,7 @@ import (
 
 	"github.com/gabilang/integration-platform/integration-platform-service/controllers"
 	"github.com/gabilang/integration-platform/integration-platform-service/middleware"
+	jwtmw "github.com/gabilang/integration-platform/integration-platform-service/middleware/jwt"
 	"github.com/gabilang/integration-platform/integration-platform-service/middleware/logger"
 )
 
@@ -18,16 +19,18 @@ type AppParams struct {
 func NewHandler(params AppParams) http.Handler {
 	mux := http.NewServeMux()
 
-	// Health check — no auth, no middleware
+	// Health check — unauthenticated
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`)) //nolint:errcheck
 	})
 
-	// API routes
-	registerProjectRoutes(mux, params.ProjectController)
+	// API routes — protected by JWT middleware
+	apiMux := http.NewServeMux()
+	registerProjectRoutes(apiMux, params.ProjectController)
+	mux.Handle("/organizations/", jwtmw.Middleware(apiMux))
 
-	// Apply middleware (outermost first, innermost applied last)
+	// Global middleware stack (outermost applied last)
 	var handler http.Handler = mux
 	handler = middleware.ExtractAuthToken()(handler)
 	handler = logger.RequestLogger()(handler)

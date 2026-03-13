@@ -27,8 +27,8 @@ func Load() (Config, error) {
 		ServerPort:         r.readOptionalInt("SERVER_PORT", 8080),
 		LogLevel:           r.readOptionalString("LOG_LEVEL", "info"),
 		CORSAllowedOrigins: r.readOptionalString("CORS_ALLOWED_ORIGINS", "*"),
-		OpenChoreo: OpenChoreoConfig{
-			BaseURL: r.readRequiredString("OPENCHOREO_BASE_URL"),
+		PlatformAPI: PlatformAPIConfig{
+			BaseURL: r.readRequiredString("PLATFORM_API_SERVICE_BASE_URL"),
 		},
 	}
 

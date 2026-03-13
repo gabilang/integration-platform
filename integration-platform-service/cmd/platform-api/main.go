@@ -27,7 +27,7 @@ func main() {
 	setupLogger(cfg.LogLevel)
 
 	// Wire dependencies
-	projectClient := openchoreo.NewProjectClient(cfg.OpenChoreo.BaseURL)
+	projectClient := openchoreo.NewProjectClient(cfg.PlatformAPI.BaseURL)
 	projectService := services.NewProjectService(projectClient)
 	projectController := controllers.NewProjectController(projectService)
 
