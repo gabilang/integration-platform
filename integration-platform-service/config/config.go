@@ -12,5 +12,4 @@ type Config struct {
 
 type OpenChoreoConfig struct {
 	BaseURL string
-	Token   string
 }

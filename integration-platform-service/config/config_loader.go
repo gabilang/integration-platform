@@ -29,7 +29,6 @@ func Load() (Config, error) {
 		CORSAllowedOrigins: r.readOptionalString("CORS_ALLOWED_ORIGINS", "*"),
 		OpenChoreo: OpenChoreoConfig{
 			BaseURL: r.readRequiredString("OPENCHOREO_BASE_URL"),
-			Token:   r.readOptionalString("OPENCHOREO_TOKEN", ""),
 		},
 	}
 

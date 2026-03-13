@@ -29,6 +29,7 @@ func NewHandler(params AppParams) http.Handler {
 
 	// Apply middleware (outermost first, innermost applied last)
 	var handler http.Handler = mux
+	handler = middleware.ExtractAuthToken()(handler)
 	handler = logger.RequestLogger()(handler)
 	handler = middleware.AddCorrelationID()(handler)
 	handler = middleware.CORS(params.CORSAllowedOrigins)(handler)

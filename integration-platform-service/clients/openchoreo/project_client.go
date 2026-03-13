@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gabilang/integration-platform/integration-platform-service/clients/requests"
+	"github.com/gabilang/integration-platform/integration-platform-service/middleware"
 	"github.com/gabilang/integration-platform/integration-platform-service/models"
 )
 
@@ -20,17 +21,15 @@ type ProjectClient interface {
 
 type projectClient struct {
 	baseURL    string
-	token      string
 	httpClient *http.Client
 }
 
 // NewProjectClient creates a new OpenChoreo project client.
 // baseURL is the OpenChoreo API base URL (e.g. http://host/wso2cloud-dp).
-// token is the Bearer token used for authentication (optional).
-func NewProjectClient(baseURL, token string) ProjectClient {
+// The Bearer token is read from the request context on each call.
+func NewProjectClient(baseURL string) ProjectClient {
 	return &projectClient{
 		baseURL:    baseURL,
-		token:      token,
 		httpClient: &http.Client{},
 	}
 }
@@ -39,16 +38,16 @@ func (c *projectClient) projectsURL(orgName string) string {
 	return fmt.Sprintf("%s/namespaces/%s/projects", c.baseURL, orgName)
 }
 
-func (c *projectClient) newRequest(name, method, url string) *requests.HttpRequest {
+func (c *projectClient) newRequest(ctx context.Context, name, method, url string) *requests.HttpRequest {
 	req := requests.NewRequest(name, method, url)
-	if c.token != "" {
-		req.SetHeader("Authorization", "Bearer "+c.token)
+	if token := middleware.GetAuthToken(ctx); token != "" {
+		req.SetHeader("Authorization", "Bearer "+token)
 	}
 	return req
 }
 
 func (c *projectClient) ListProjects(ctx context.Context, orgName string, limit int, cursor string) (*models.ProjectList, error) {
-	req := c.newRequest("openchoreo.ListProjects", http.MethodGet, c.projectsURL(orgName))
+	req := c.newRequest(ctx, "openchoreo.ListProjects", http.MethodGet, c.projectsURL(orgName))
 	if limit > 0 {
 		req.SetQuery("limit", fmt.Sprintf("%d", limit))
 	}
@@ -66,7 +65,7 @@ func (c *projectClient) ListProjects(ctx context.Context, orgName string, limit 
 
 func (c *projectClient) GetProject(ctx context.Context, orgName, projectName string) (*models.Project, error) {
 	url := fmt.Sprintf("%s/%s", c.projectsURL(orgName), projectName)
-	req := c.newRequest("openchoreo.GetProject", http.MethodGet, url)
+	req := c.newRequest(ctx, "openchoreo.GetProject", http.MethodGet, url)
 
 	result := requests.SendRequest(ctx, c.httpClient, req)
 	var project models.Project
@@ -77,7 +76,7 @@ func (c *projectClient) GetProject(ctx context.Context, orgName, projectName str
 }
 
 func (c *projectClient) CreateProject(ctx context.Context, orgName string, body *models.CreateProjectRequest) (*models.Project, error) {
-	req := c.newRequest("openchoreo.CreateProject", http.MethodPost, c.projectsURL(orgName))
+	req := c.newRequest(ctx, "openchoreo.CreateProject", http.MethodPost, c.projectsURL(orgName))
 	req.SetJSON(body)
 
 	result := requests.SendRequest(ctx, c.httpClient, req)
@@ -90,7 +89,7 @@ func (c *projectClient) CreateProject(ctx context.Context, orgName string, body 
 
 func (c *projectClient) UpdateProject(ctx context.Context, orgName, projectName string, body *models.UpdateProjectRequest) (*models.Project, error) {
 	url := fmt.Sprintf("%s/%s", c.projectsURL(orgName), projectName)
-	req := c.newRequest("openchoreo.UpdateProject", http.MethodPut, url)
+	req := c.newRequest(ctx, "openchoreo.UpdateProject", http.MethodPut, url)
 	req.SetJSON(body)
 
 	result := requests.SendRequest(ctx, c.httpClient, req)
@@ -103,7 +102,7 @@ func (c *projectClient) UpdateProject(ctx context.Context, orgName, projectName 
 
 func (c *projectClient) DeleteProject(ctx context.Context, orgName, projectName string) error {
 	url := fmt.Sprintf("%s/%s", c.projectsURL(orgName), projectName)
-	req := c.newRequest("openchoreo.DeleteProject", http.MethodDelete, url)
+	req := c.newRequest(ctx, "openchoreo.DeleteProject", http.MethodDelete, url)
 
 	result := requests.SendRequest(ctx, c.httpClient, req)
 	if err := result.ScanResponse(nil, http.StatusNoContent); err != nil {
