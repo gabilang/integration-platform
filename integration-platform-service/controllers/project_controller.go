@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	jwtmw "github.com/gabilang/integration-platform/integration-platform-service/middleware/jwt"
 	"github.com/gabilang/integration-platform/integration-platform-service/models"
 	"github.com/gabilang/integration-platform/integration-platform-service/services"
 	"github.com/gabilang/integration-platform/integration-platform-service/utils"
@@ -28,13 +29,26 @@ func NewProjectController(service services.ProjectService) ProjectController {
 	return &projectController{service: service}
 }
 
+// orgHandle extracts the organization handle from the JWT claims stored in context.
+func orgHandle(r *http.Request) (string, bool) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		return "", false
+	}
+	return claims.OrgHandle, true
+}
+
 func (c *projectController) ListProjects(w http.ResponseWriter, r *http.Request) {
-	orgName := r.PathValue("orgName")
+	org, ok := orgHandle(r)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
 	cursor := r.URL.Query().Get("cursor")
 
-	list, err := c.service.ListProjects(r.Context(), orgName, 20, cursor)
+	list, err := c.service.ListProjects(r.Context(), org, 20, cursor)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list projects failed", "error", err, "org", orgName)
+		slog.ErrorContext(r.Context(), "list projects failed", "error", err, "org", org)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to list projects")
 		return
 	}
@@ -43,16 +57,20 @@ func (c *projectController) ListProjects(w http.ResponseWriter, r *http.Request)
 }
 
 func (c *projectController) GetProject(w http.ResponseWriter, r *http.Request) {
-	orgName := r.PathValue("orgName")
+	org, ok := orgHandle(r)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
 	projectName := r.PathValue("projectName")
 
-	project, err := c.service.GetProject(r.Context(), orgName, projectName)
+	project, err := c.service.GetProject(r.Context(), org, projectName)
 	if err != nil {
 		if errors.Is(err, services.ErrProjectNotFound) {
 			utils.WriteErrorResponse(w, http.StatusNotFound, "project not found")
 			return
 		}
-		slog.ErrorContext(r.Context(), "get project failed", "error", err, "org", orgName, "project", projectName)
+		slog.ErrorContext(r.Context(), "get project failed", "error", err, "org", org, "project", projectName)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to get project")
 		return
 	}
@@ -61,7 +79,11 @@ func (c *projectController) GetProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *projectController) CreateProject(w http.ResponseWriter, r *http.Request) {
-	orgName := r.PathValue("orgName")
+	org, ok := orgHandle(r)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
 
 	var req models.CreateProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -73,9 +95,9 @@ func (c *projectController) CreateProject(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	project, err := c.service.CreateProject(r.Context(), orgName, &req)
+	project, err := c.service.CreateProject(r.Context(), org, &req)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "create project failed", "error", err, "org", orgName)
+		slog.ErrorContext(r.Context(), "create project failed", "error", err, "org", org)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to create project")
 		return
 	}
@@ -84,7 +106,11 @@ func (c *projectController) CreateProject(w http.ResponseWriter, r *http.Request
 }
 
 func (c *projectController) UpdateProject(w http.ResponseWriter, r *http.Request) {
-	orgName := r.PathValue("orgName")
+	org, ok := orgHandle(r)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
 	projectName := r.PathValue("projectName")
 
 	var req models.UpdateProjectRequest
@@ -93,13 +119,13 @@ func (c *projectController) UpdateProject(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	project, err := c.service.UpdateProject(r.Context(), orgName, projectName, &req)
+	project, err := c.service.UpdateProject(r.Context(), org, projectName, &req)
 	if err != nil {
 		if errors.Is(err, services.ErrProjectNotFound) {
 			utils.WriteErrorResponse(w, http.StatusNotFound, "project not found")
 			return
 		}
-		slog.ErrorContext(r.Context(), "update project failed", "error", err, "org", orgName, "project", projectName)
+		slog.ErrorContext(r.Context(), "update project failed", "error", err, "org", org, "project", projectName)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to update project")
 		return
 	}
@@ -108,16 +134,20 @@ func (c *projectController) UpdateProject(w http.ResponseWriter, r *http.Request
 }
 
 func (c *projectController) DeleteProject(w http.ResponseWriter, r *http.Request) {
-	orgName := r.PathValue("orgName")
+	org, ok := orgHandle(r)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
 	projectName := r.PathValue("projectName")
 
-	err := c.service.DeleteProject(r.Context(), orgName, projectName)
+	err := c.service.DeleteProject(r.Context(), org, projectName)
 	if err != nil {
 		if errors.Is(err, services.ErrProjectNotFound) {
 			utils.WriteErrorResponse(w, http.StatusNotFound, "project not found")
 			return
 		}
-		slog.ErrorContext(r.Context(), "delete project failed", "error", err, "org", orgName, "project", projectName)
+		slog.ErrorContext(r.Context(), "delete project failed", "error", err, "org", org, "project", projectName)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to delete project")
 		return
 	}

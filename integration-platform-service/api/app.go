@@ -28,7 +28,8 @@ func NewHandler(params AppParams) http.Handler {
 	// API routes — protected by JWT middleware
 	apiMux := http.NewServeMux()
 	registerProjectRoutes(apiMux, params.ProjectController)
-	mux.Handle("/organizations/", jwtmw.Middleware(apiMux))
+	mux.Handle("/projects", jwtmw.Middleware(apiMux))
+	mux.Handle("/projects/", jwtmw.Middleware(apiMux))
 
 	// Global middleware stack (outermost applied last)
 	var handler http.Handler = mux
