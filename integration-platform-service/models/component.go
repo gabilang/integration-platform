@@ -13,6 +13,14 @@ type Component struct {
 	Status      string `json:"status,omitempty"`
 }
 
+// ComponentList is the paginated list response for components.
+type ComponentList struct {
+	Items      []Component `json:"items"`
+	TotalCount int         `json:"totalCount,omitempty"`
+	Page       int         `json:"page,omitempty"`
+	PageSize   int         `json:"pageSize,omitempty"`
+}
+
 // WorkflowRun represents a triggered component build/workflow run.
 type WorkflowRun struct {
 	Name      string `json:"name,omitempty"`
@@ -20,48 +28,47 @@ type WorkflowRun struct {
 	StartedAt string `json:"startedAt,omitempty"`
 }
 
-// RepositoryConfig holds source-code repository details for a component.
-type RepositoryConfig struct {
-	URL     string `json:"url"`
-	Branch  string `json:"branch,omitempty"`
-	AppPath string `json:"appPath,omitempty"`
+// WorkflowRevision is the git revision used by a component workflow.
+type WorkflowRevision struct {
+	Branch string `json:"branch,omitempty"`
+	Commit string `json:"commit,omitempty"`
 }
 
-// BuildpackConfig holds settings for a buildpack-based build.
-type BuildpackConfig struct {
-	Language        string `json:"language,omitempty"`
-	LanguageVersion string `json:"languageVersion,omitempty"`
-	RunCommand      string `json:"runCommand,omitempty"`
+// WorkflowRepository is the repository config embedded in a component workflow.
+type WorkflowRepository struct {
+	URL      string            `json:"url,omitempty"`
+	Revision *WorkflowRevision `json:"revision,omitempty"`
+	AppPath  string            `json:"appPath,omitempty"`
 }
 
-// DockerConfig holds settings for a Docker-based build.
-type DockerConfig struct {
-	DockerfilePath string `json:"dockerfilePath,omitempty"`
+// WorkflowSystemParameters holds system-level parameters for a component workflow.
+type WorkflowSystemParameters struct {
+	Repository *WorkflowRepository `json:"repository,omitempty"`
 }
 
-// BuildConfig describes how to build the component.
-// Type must be "buildpack" or "docker".
-type BuildConfig struct {
-	Type      string           `json:"type"`
-	Buildpack *BuildpackConfig `json:"buildpack,omitempty"`
-	Docker    *DockerConfig    `json:"docker,omitempty"`
+// ComponentWorkflowConfig is the workflow configuration embedded in a component.
+type ComponentWorkflowConfig struct {
+	Name             string                    `json:"name,omitempty"`
+	SystemParameters *WorkflowSystemParameters `json:"systemParameters,omitempty"`
+	Parameters       map[string]any            `json:"parameters,omitempty"`
 }
 
-// CreateServiceComponentRequest is the incoming API request to create a service
-// component, trigger its first build, and auto-deploy to the default environment.
-type CreateServiceComponentRequest struct {
-	Name        string           `json:"name"`
-	DisplayName string           `json:"displayName,omitempty"`
-	Description string           `json:"description,omitempty"`
-	Repository  RepositoryConfig `json:"repository"`
-	Build       BuildConfig      `json:"build"`
-	Port        int              `json:"port,omitempty"`
-	Exposed     bool             `json:"exposed,omitempty"`
+// CreateComponentRequest matches the platform-api-service component creation format.
+// The body is forwarded as-is after extracting the component name for routing.
+type CreateComponentRequest struct {
+	Name          string                   `json:"name"`
+	DisplayName   string                   `json:"displayName,omitempty"`
+	Description   string                   `json:"description,omitempty"`
+	Type          string                   `json:"type,omitempty"`
+	ComponentType string                   `json:"componentType,omitempty"`
+	AutoDeploy    bool                     `json:"autoDeploy,omitempty"`
+	Workflow      *ComponentWorkflowConfig `json:"workflow,omitempty"`
+	Parameters    map[string]any           `json:"parameters,omitempty"`
 }
 
-// CreateServiceComponentResponse is returned after the component is created and
-// the initial build run has been triggered.
-type CreateServiceComponentResponse struct {
+// CreateComponentResponse is returned after the component is created and the
+// initial build run has been triggered.
+type CreateComponentResponse struct {
 	Component *Component   `json:"component"`
 	BuildRun  *WorkflowRun `json:"buildRun,omitempty"`
 }

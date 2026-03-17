@@ -7,5 +7,6 @@ import (
 )
 
 func registerComponentRoutes(mux *http.ServeMux, c controllers.ComponentController) {
-	mux.HandleFunc("POST /projects/{projectName}/components", c.CreateServiceComponent)
+	mux.HandleFunc("GET /projects/{projectName}/components", c.ListComponents)
+	mux.HandleFunc("POST /projects/{projectName}/components", c.CreateComponent)
 }

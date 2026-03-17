@@ -12,7 +12,8 @@ import (
 
 // ComponentClient defines operations for managing OpenChoreo components.
 type ComponentClient interface {
-	CreateServiceComponent(ctx context.Context, orgName, projectName string, req *models.CreateServiceComponentRequest) (*models.Component, error)
+	ListComponents(ctx context.Context, orgName, projectName string, limit int, cursor string) (*models.ComponentList, error)
+	CreateComponent(ctx context.Context, orgName, projectName string, req *models.CreateComponentRequest) (*models.Component, error)
 	TriggerBuild(ctx context.Context, orgName, projectName, componentName string) (*models.WorkflowRun, error)
 }
 
@@ -45,6 +46,11 @@ func (c *componentClient) newRequest(ctx context.Context, name, method, url stri
 	return req
 }
 
+// platformComponentListResponse is the envelope for component list responses.
+type platformComponentListResponse struct {
+	Data models.ComponentList `json:"data"`
+}
+
 // platformComponentResponse is the envelope for single-component responses.
 type platformComponentResponse struct {
 	Data models.Component `json:"data"`
@@ -55,63 +61,36 @@ type platformWorkflowRunResponse struct {
 	Data models.WorkflowRun `json:"data"`
 }
 
-// ocWorkflowRevision is the git revision for the build workflow.
-type ocWorkflowRevision struct {
-	Branch string `json:"branch,omitempty"`
+// ListComponents returns all components belonging to the given project.
+func (c *componentClient) ListComponents(ctx context.Context, _, projectName string, limit int, cursor string) (*models.ComponentList, error) {
+	req := c.newRequest(ctx, "openchoreo.ListComponents", http.MethodGet, c.componentsURL(projectName))
+	if limit > 0 {
+		req.SetQuery("limit", fmt.Sprintf("%d", limit))
+	}
+	if cursor != "" {
+		req.SetQuery("cursor", cursor)
+	}
+
+	result := requests.SendRequest(ctx, c.httpClient, req)
+	var envelope platformComponentListResponse
+	if err := result.ScanResponse(&envelope, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("list components: %w", err)
+	}
+	return &envelope.Data, nil
 }
 
-// ocWorkflowRepository is the repository config embedded in the workflow.
-type ocWorkflowRepository struct {
-	URL      string              `json:"url"`
-	AppPath  string              `json:"appPath,omitempty"`
-	Revision *ocWorkflowRevision `json:"revision,omitempty"`
-}
-
-// ocWorkflowSystemParameters holds system-level parameters for the build workflow.
-type ocWorkflowSystemParameters struct {
-	Repository *ocWorkflowRepository `json:"repository,omitempty"`
-}
-
-// ocWorkflowConfig describes the build workflow to associate with the component.
-type ocWorkflowConfig struct {
-	WorkflowName     string                      `json:"workflowName"`
-	SystemParameters *ocWorkflowSystemParameters `json:"systemParameters,omitempty"`
-	Parameters       map[string]any              `json:"parameters,omitempty"`
-}
-
-// ocCreateComponentRequest is the body sent to the platform-api-service.
-type ocCreateComponentRequest struct {
-	Name        string            `json:"name"`
-	DisplayName string            `json:"displayName,omitempty"`
-	Description string            `json:"description,omitempty"`
-	Type        string            `json:"type"`
-	ProjectName string            `json:"projectName"`
-	AutoDeploy  bool              `json:"autoDeploy"`
-	Parameters  map[string]any    `json:"parameters,omitempty"`
-	Workflow    *ocWorkflowConfig `json:"workflow,omitempty"`
-}
-
-const (
-	componentTypeService    = "service"
-	workflowBuildpack       = "buildpack-build"
-	workflowDocker          = "docker-build"
-	defaultBranch           = "main"
-	defaultAppPath          = "./"
-)
-
-// CreateServiceComponent creates a service-type component in the platform-api-service.
-// The component is created with autoDeploy=true so OpenChoreo automatically
-// deploys it to the default environment once the build succeeds.
-func (c *componentClient) CreateServiceComponent(ctx context.Context, _, projectName string, req *models.CreateServiceComponentRequest) (*models.Component, error) {
-	body := buildCreateComponentRequest(projectName, req)
-
-	httpReq := c.newRequest(ctx, "openchoreo.CreateServiceComponent", http.MethodPost, c.componentsURL(projectName))
-	httpReq.SetJSON(body)
+// CreateComponent creates a component in the platform-api-service.
+// The request body is forwarded as-is (same format as the platform-api-service expects).
+// The component is expected to have autoDeploy=true so OpenChoreo automatically deploys
+// it to the default environment once the build succeeds.
+func (c *componentClient) CreateComponent(ctx context.Context, _, projectName string, req *models.CreateComponentRequest) (*models.Component, error) {
+	httpReq := c.newRequest(ctx, "openchoreo.CreateComponent", http.MethodPost, c.componentsURL(projectName))
+	httpReq.SetJSON(req)
 
 	result := requests.SendRequest(ctx, c.httpClient, httpReq)
 	var envelope platformComponentResponse
 	if err := result.ScanResponse(&envelope, http.StatusCreated); err != nil {
-		return nil, fmt.Errorf("create service component: %w", err)
+		return nil, fmt.Errorf("create component: %w", err)
 	}
 	return &envelope.Data, nil
 }
@@ -119,7 +98,7 @@ func (c *componentClient) CreateServiceComponent(ctx context.Context, _, project
 // TriggerBuild triggers an initial (or manual) build workflow run for the component.
 func (c *componentClient) TriggerBuild(ctx context.Context, _, projectName, componentName string) (*models.WorkflowRun, error) {
 	httpReq := c.newRequest(ctx, "openchoreo.TriggerBuild", http.MethodPost, c.workflowRunsURL(projectName, componentName))
-	httpReq.SetJSON(map[string]any{}) // empty body; platform uses component's embedded workflow config
+	httpReq.SetJSON(map[string]any{})
 
 	result := requests.SendRequest(ctx, c.httpClient, httpReq)
 	var envelope platformWorkflowRunResponse
@@ -127,78 +106,4 @@ func (c *componentClient) TriggerBuild(ctx context.Context, _, projectName, comp
 		return nil, fmt.Errorf("trigger build: %w", err)
 	}
 	return &envelope.Data, nil
-}
-
-// buildCreateComponentRequest converts the API request into the platform-api-service body.
-func buildCreateComponentRequest(projectName string, req *models.CreateServiceComponentRequest) *ocCreateComponentRequest {
-	params := map[string]any{
-		"port":    req.Port,
-		"exposed": req.Exposed,
-	}
-
-	workflow := buildWorkflowConfig(req)
-
-	return &ocCreateComponentRequest{
-		Name:        req.Name,
-		DisplayName: req.DisplayName,
-		Description: req.Description,
-		Type:        componentTypeService,
-		ProjectName: projectName,
-		AutoDeploy:  true,
-		Parameters:  params,
-		Workflow:    workflow,
-	}
-}
-
-// buildWorkflowConfig constructs the workflow section of the component request.
-func buildWorkflowConfig(req *models.CreateServiceComponentRequest) *ocWorkflowConfig {
-	branch := req.Repository.Branch
-	if branch == "" {
-		branch = defaultBranch
-	}
-	appPath := req.Repository.AppPath
-	if appPath == "" {
-		appPath = defaultAppPath
-	}
-
-	sysParams := &ocWorkflowSystemParameters{
-		Repository: &ocWorkflowRepository{
-			URL:     req.Repository.URL,
-			AppPath: appPath,
-			Revision: &ocWorkflowRevision{
-				Branch: branch,
-			},
-		},
-	}
-
-	workflowName := workflowBuildpack
-	var buildParams map[string]any
-
-	switch req.Build.Type {
-	case "docker":
-		workflowName = workflowDocker
-		if req.Build.Docker != nil {
-			buildParams = map[string]any{
-				"dockerConfigs": map[string]any{
-					"dockerfilePath": req.Build.Docker.DockerfilePath,
-				},
-			}
-		}
-	default: // "buildpack" or unset defaults to buildpack
-		if req.Build.Buildpack != nil {
-			buildParams = map[string]any{
-				"buildpackConfigs": map[string]any{
-					"language":        req.Build.Buildpack.Language,
-					"languageVersion": req.Build.Buildpack.LanguageVersion,
-					"runCommand":      req.Build.Buildpack.RunCommand,
-				},
-			}
-		}
-	}
-
-	return &ocWorkflowConfig{
-		WorkflowName:     workflowName,
-		SystemParameters: sysParams,
-		Parameters:       buildParams,
-	}
 }

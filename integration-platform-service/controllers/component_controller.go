@@ -13,7 +13,8 @@ import (
 
 // ComponentController handles HTTP requests for component operations.
 type ComponentController interface {
-	CreateServiceComponent(w http.ResponseWriter, r *http.Request)
+	ListComponents(w http.ResponseWriter, r *http.Request)
+	CreateComponent(w http.ResponseWriter, r *http.Request)
 }
 
 type componentController struct {
@@ -24,7 +25,28 @@ func NewComponentController(service services.ComponentService) ComponentControll
 	return &componentController{service: service}
 }
 
-func (c *componentController) CreateServiceComponent(w http.ResponseWriter, r *http.Request) {
+func (c *componentController) ListComponents(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	org := claims.OrgHandle
+	projectName := r.PathValue("projectName")
+	cursor := r.URL.Query().Get("cursor")
+
+	list, err := c.service.ListComponents(r.Context(), org, projectName, 100, cursor)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "list components failed",
+			"error", err, "org", org, "project", projectName)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to list components")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusOK, list)
+}
+
+func (c *componentController) CreateComponent(w http.ResponseWriter, r *http.Request) {
 	claims := jwtmw.ClaimsFromContext(r.Context())
 	if claims == nil || claims.OrgHandle == "" {
 		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
@@ -33,7 +55,7 @@ func (c *componentController) CreateServiceComponent(w http.ResponseWriter, r *h
 	org := claims.OrgHandle
 	projectName := r.PathValue("projectName")
 
-	var req models.CreateServiceComponentRequest
+	var req models.CreateComponentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -42,20 +64,12 @@ func (c *componentController) CreateServiceComponent(w http.ResponseWriter, r *h
 		utils.WriteErrorResponse(w, http.StatusBadRequest, "name is required")
 		return
 	}
-	if req.Repository.URL == "" {
-		utils.WriteErrorResponse(w, http.StatusBadRequest, "repository.url is required")
-		return
-	}
-	if req.Build.Type == "" {
-		utils.WriteErrorResponse(w, http.StatusBadRequest, "build.type is required")
-		return
-	}
 
-	resp, err := c.service.CreateServiceComponent(r.Context(), org, projectName, &req)
+	resp, err := c.service.CreateComponent(r.Context(), org, projectName, &req)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "create service component failed",
+		slog.ErrorContext(r.Context(), "create component failed",
 			"error", err, "org", org, "project", projectName)
-		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to create service component")
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to create component")
 		return
 	}
 

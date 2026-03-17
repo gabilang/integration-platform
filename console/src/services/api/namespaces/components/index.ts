@@ -48,13 +48,10 @@ import type {
 } from '../../types';
 
 interface ApiListResponse<T> {
-  success: boolean;
-  data: {
-    items: T[];
-    totalCount?: number;
-    page?: number;
-    pageSize?: number;
-  };
+  items: T[];
+  totalCount?: number;
+  page?: number;
+  pageSize?: number;
 }
 
 function base(project: string): string {
@@ -75,8 +72,10 @@ export async function listComponents(
   namespaceName: string,
   params?: PaginationParams & { projectName?: string }
 ): Promise<PaginatedList<Component>> {
-  const response = await openchoreoClient.get<ApiListResponse<Component>>(base(namespaceName), params);
-  return { items: response?.data?.items ?? [] };
+  const { projectName, ...queryParams } = params ?? {};
+  const projectPath = projectName ?? namespaceName;
+  const response = await openchoreoClient.get<ApiListResponse<Component>>(base(projectPath), queryParams);
+  return { items: response?.items ?? [] };
 }
 
 // ---------------------------------------------------------------------------
