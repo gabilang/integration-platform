@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { Box, CircularProgress } from '@wso2/oxygen-ui';
 import { setToken, type OrganizationUnit, useOrganizations } from './services/api';
-import { useAsgardeo } from './auth';
+import { isBypassEnabled, useAsgardeo } from './auth';
 import { useUserClaims } from './auth/useUserClaims';
 import { getDefaultOrganizationId, organizations as mockOrganizations, setRuntimeOrganizations, type OrganizationRecord } from './data/mockData';
 import DevantLayout from './layouts/DevantLayout';
@@ -61,14 +61,17 @@ function buildRuntimeOrganizations(
   claims: Record<string, unknown> | null
 ): OrganizationRecord[] {
   const claimOrganization = resolveClaimOrganization(claims);
+  const useMockProjects = isBypassEnabled();
 
   if (!apiOrganizations.length) {
     if (claimOrganization) {
-      const matchingMock = mockOrganizations.find(
-        (organization) =>
-          normalizeOrganizationId(organization.id) === normalizeOrganizationId(claimOrganization.id) ||
-          normalizeOrganizationId(organization.name) === normalizeOrganizationId(claimOrganization.name)
-      );
+      const matchingMock = useMockProjects
+        ? mockOrganizations.find(
+            (organization) =>
+              normalizeOrganizationId(organization.id) === normalizeOrganizationId(claimOrganization.id) ||
+              normalizeOrganizationId(organization.name) === normalizeOrganizationId(claimOrganization.name)
+          )
+        : undefined;
 
       if (matchingMock) {
         return [
@@ -83,18 +86,20 @@ function buildRuntimeOrganizations(
       return [claimOrganization];
     }
 
-    return mockOrganizations;
+    return useMockProjects ? mockOrganizations : [];
   }
 
   const matched = apiOrganizations.map((organization) => {
     const runtimeId = getRuntimeOrganizationId(organization);
     const candidates = getOrganizationAliases(organization);
 
-    const mockMatch = mockOrganizations.find((mockOrganization) => {
-      const mockId = normalizeOrganizationId(mockOrganization.id);
-      const mockName = normalizeOrganizationId(mockOrganization.name);
-      return candidates.some((candidate) => candidate === mockId || candidate === mockName);
-    });
+    const mockMatch = useMockProjects
+      ? mockOrganizations.find((mockOrganization) => {
+          const mockId = normalizeOrganizationId(mockOrganization.id);
+          const mockName = normalizeOrganizationId(mockOrganization.name);
+          return candidates.some((candidate) => candidate === mockId || candidate === mockName);
+        })
+      : undefined;
 
     if (!mockMatch) {
       return {
