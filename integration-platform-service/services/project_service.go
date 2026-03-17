@@ -11,7 +11,10 @@ import (
 	"github.com/gabilang/integration-platform/integration-platform-service/models"
 )
 
-var ErrProjectNotFound = errors.New("project not found")
+var (
+	ErrProjectNotFound = errors.New("project not found")
+	ErrUnauthorized    = errors.New("unauthorized")
+)
 
 // ProjectService handles business logic for project operations.
 type ProjectService interface {
@@ -75,6 +78,8 @@ func translateHTTPError(err error) error {
 		switch httpErr.StatusCode {
 		case http.StatusNotFound:
 			return fmt.Errorf("%w: %s", ErrProjectNotFound, httpErr.Body)
+		case http.StatusUnauthorized:
+			return ErrUnauthorized
 		}
 	}
 	return err

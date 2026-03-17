@@ -48,6 +48,10 @@ func (c *projectController) ListProjects(w http.ResponseWriter, r *http.Request)
 
 	list, err := c.service.ListProjects(r.Context(), org, 20, cursor)
 	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
 		slog.ErrorContext(r.Context(), "list projects failed", "error", err, "org", org)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to list projects")
 		return
@@ -66,6 +70,10 @@ func (c *projectController) GetProject(w http.ResponseWriter, r *http.Request) {
 
 	project, err := c.service.GetProject(r.Context(), org, projectName)
 	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
 		if errors.Is(err, services.ErrProjectNotFound) {
 			utils.WriteErrorResponse(w, http.StatusNotFound, "project not found")
 			return
@@ -97,6 +105,10 @@ func (c *projectController) CreateProject(w http.ResponseWriter, r *http.Request
 
 	project, err := c.service.CreateProject(r.Context(), org, &req)
 	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
 		slog.ErrorContext(r.Context(), "create project failed", "error", err, "org", org)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to create project")
 		return
@@ -121,6 +133,10 @@ func (c *projectController) UpdateProject(w http.ResponseWriter, r *http.Request
 
 	project, err := c.service.UpdateProject(r.Context(), org, projectName, &req)
 	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
 		if errors.Is(err, services.ErrProjectNotFound) {
 			utils.WriteErrorResponse(w, http.StatusNotFound, "project not found")
 			return
@@ -143,6 +159,10 @@ func (c *projectController) DeleteProject(w http.ResponseWriter, r *http.Request
 
 	err := c.service.DeleteProject(r.Context(), org, projectName)
 	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
 		if errors.Is(err, services.ErrProjectNotFound) {
 			utils.WriteErrorResponse(w, http.StatusNotFound, "project not found")
 			return

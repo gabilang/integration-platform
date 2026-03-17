@@ -71,6 +71,8 @@ func translateComponentHTTPError(err error) error {
 		switch httpErr.StatusCode {
 		case http.StatusNotFound:
 			return fmt.Errorf("%w: %s", ErrComponentNotFound, httpErr.Body)
+		case http.StatusUnauthorized:
+			return ErrUnauthorized
 		}
 	}
 	return err

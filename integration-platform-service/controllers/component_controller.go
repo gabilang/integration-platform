@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -37,6 +38,10 @@ func (c *componentController) ListComponents(w http.ResponseWriter, r *http.Requ
 
 	list, err := c.service.ListComponents(r.Context(), org, projectName, 100, cursor)
 	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
 		slog.ErrorContext(r.Context(), "list components failed",
 			"error", err, "org", org, "project", projectName)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to list components")
@@ -67,6 +72,10 @@ func (c *componentController) CreateComponent(w http.ResponseWriter, r *http.Req
 
 	resp, err := c.service.CreateComponent(r.Context(), org, projectName, &req)
 	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
 		slog.ErrorContext(r.Context(), "create component failed",
 			"error", err, "org", org, "project", projectName)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to create component")
