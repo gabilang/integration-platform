@@ -19,7 +19,7 @@ export function mapApiProjectToProjectRecord(project: ApiProject): ProjectRecord
     name: project.displayName?.trim() || projectId,
     description: project.description?.trim() || '',
     repository: resolveProjectRepository(project),
-    updatedAt: project.updatedAt || project.creationTimestamp,
+    updatedAt: project.updatedAt || project.createdAt || project.creationTimestamp,
     integrations: [],
   };
 }

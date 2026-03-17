@@ -11,8 +11,9 @@ import (
 
 // AppParams holds all dependencies needed to build the HTTP handler.
 type AppParams struct {
-	CORSAllowedOrigins string
-	ProjectController  controllers.ProjectController
+	CORSAllowedOrigins  string
+	ProjectController   controllers.ProjectController
+	ComponentController controllers.ComponentController
 }
 
 // NewHandler assembles the full HTTP handler with middleware and routes.
@@ -28,6 +29,7 @@ func NewHandler(params AppParams) http.Handler {
 	// API routes — protected by JWT middleware
 	apiMux := http.NewServeMux()
 	registerProjectRoutes(apiMux, params.ProjectController)
+	registerComponentRoutes(apiMux, params.ComponentController)
 	mux.Handle("/projects", jwtmw.Middleware(apiMux))
 	mux.Handle("/projects/", jwtmw.Middleware(apiMux))
 

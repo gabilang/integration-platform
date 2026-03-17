@@ -31,9 +31,14 @@ func main() {
 	projectService := services.NewProjectService(projectClient)
 	projectController := controllers.NewProjectController(projectService)
 
+	componentClient := openchoreo.NewComponentClient(cfg.PlatformAPI.BaseURL)
+	componentService := services.NewComponentService(componentClient)
+	componentController := controllers.NewComponentController(componentService)
+
 	handler := api.NewHandler(api.AppParams{
-		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
-		ProjectController:  projectController,
+		CORSAllowedOrigins:  cfg.CORSAllowedOrigins,
+		ProjectController:   projectController,
+		ComponentController: componentController,
 	})
 
 	server := &http.Server{
