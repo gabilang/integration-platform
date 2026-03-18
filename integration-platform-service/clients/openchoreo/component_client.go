@@ -14,6 +14,7 @@ import (
 type ComponentClient interface {
 	ListComponents(ctx context.Context, orgName, projectName string, limit int, cursor string) (*models.ComponentList, error)
 	CreateComponent(ctx context.Context, orgName, projectName string, req *models.CreateComponentRequest) (*models.Component, error)
+	UpdateBuildParameters(ctx context.Context, orgName, projectName, componentName string, req *models.UpdateBuildParametersRequest) (*models.Component, error)
 	TriggerBuild(ctx context.Context, orgName, projectName, componentName string) (*models.WorkflowRun, error)
 	ListWorkflowRuns(ctx context.Context, orgName, projectName, componentName string, limit int, cursor string) (*models.WorkflowRunList, error)
 	GetWorkflowRun(ctx context.Context, orgName, projectName, componentName, runName string) (*models.WorkflowRun, error)
@@ -34,6 +35,10 @@ func NewComponentClient(baseURL string) ComponentClient {
 
 func (c *componentClient) componentsURL(projectName string) string {
 	return fmt.Sprintf("%s/projects/%s/components", c.baseURL, projectName)
+}
+
+func (c *componentClient) componentURL(projectName, componentName string) string {
+	return fmt.Sprintf("%s/projects/%s/components/%s", c.baseURL, projectName, componentName)
 }
 
 func (c *componentClient) workflowRunsURL(projectName, componentName string) string {
@@ -102,6 +107,19 @@ func (c *componentClient) CreateComponent(ctx context.Context, _, projectName st
 	var envelope platformComponentResponse
 	if err := result.ScanResponse(&envelope, http.StatusCreated); err != nil {
 		return nil, fmt.Errorf("create component: %w", err)
+	}
+	return &envelope.Data, nil
+}
+
+// UpdateBuildParameters patches the component's workflow configuration (repository, build type, parameters).
+func (c *componentClient) UpdateBuildParameters(ctx context.Context, _, projectName, componentName string, req *models.UpdateBuildParametersRequest) (*models.Component, error) {
+	httpReq := c.newRequest(ctx, "openchoreo.UpdateBuildParameters", http.MethodPut, c.componentURL(projectName, componentName))
+	httpReq.SetJSON(req)
+
+	result := requests.SendRequest(ctx, c.httpClient, httpReq)
+	var envelope platformComponentResponse
+	if err := result.ScanResponse(&envelope, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("update build parameters: %w", err)
 	}
 	return &envelope.Data, nil
 }

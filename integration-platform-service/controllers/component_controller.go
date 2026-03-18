@@ -16,6 +16,7 @@ import (
 type ComponentController interface {
 	ListComponents(w http.ResponseWriter, r *http.Request)
 	CreateComponent(w http.ResponseWriter, r *http.Request)
+	UpdateBuildParameters(w http.ResponseWriter, r *http.Request)
 	TriggerBuild(w http.ResponseWriter, r *http.Request)
 	ListBuilds(w http.ResponseWriter, r *http.Request)
 	GetBuildStatus(w http.ResponseWriter, r *http.Request)
@@ -87,6 +88,45 @@ func (c *componentController) CreateComponent(w http.ResponseWriter, r *http.Req
 	}
 
 	utils.WriteSuccessResponse(w, http.StatusCreated, resp)
+}
+
+func (c *componentController) UpdateBuildParameters(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	org := claims.OrgHandle
+	projectName := r.PathValue("projectName")
+	componentName := r.PathValue("componentName")
+
+	var req models.UpdateBuildParametersRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Workflow == nil {
+		utils.WriteErrorResponse(w, http.StatusBadRequest, "workflow is required")
+		return
+	}
+
+	component, err := c.service.UpdateBuildParameters(r.Context(), org, projectName, componentName, &req)
+	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		if errors.Is(err, services.ErrComponentNotFound) {
+			utils.WriteErrorResponse(w, http.StatusNotFound, "component not found")
+			return
+		}
+		slog.ErrorContext(r.Context(), "update build parameters failed",
+			"error", err, "org", org, "project", projectName, "component", componentName)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to update build parameters")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusOK, component)
 }
 
 func (c *componentController) TriggerBuild(w http.ResponseWriter, r *http.Request) {

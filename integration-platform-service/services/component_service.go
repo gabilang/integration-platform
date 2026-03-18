@@ -23,6 +23,7 @@ var (
 type ComponentService interface {
 	ListComponents(ctx context.Context, orgName, projectName string, limit int, cursor string) (*models.ComponentList, error)
 	CreateComponent(ctx context.Context, orgName, projectName string, req *models.CreateComponentRequest) (*models.CreateComponentResponse, error)
+	UpdateBuildParameters(ctx context.Context, orgName, projectName, componentName string, req *models.UpdateBuildParametersRequest) (*models.Component, error)
 	TriggerBuild(ctx context.Context, orgName, projectName, componentName string) (*models.WorkflowRun, error)
 	ListBuilds(ctx context.Context, orgName, projectName, componentName string, limit int, cursor string) (*models.WorkflowRunList, error)
 	GetBuildStatus(ctx context.Context, orgName, projectName, componentName, buildName string) (*models.WorkflowRun, error)
@@ -70,6 +71,14 @@ func (s *componentService) CreateComponent(ctx context.Context, orgName, project
 		Component: component,
 		BuildRun:  buildRun,
 	}, nil
+}
+
+func (s *componentService) UpdateBuildParameters(ctx context.Context, orgName, projectName, componentName string, req *models.UpdateBuildParametersRequest) (*models.Component, error) {
+	component, err := s.client.UpdateBuildParameters(ctx, orgName, projectName, componentName, req)
+	if err != nil {
+		return nil, translateComponentHTTPError(err)
+	}
+	return component, nil
 }
 
 func (s *componentService) TriggerBuild(ctx context.Context, orgName, projectName, componentName string) (*models.WorkflowRun, error) {

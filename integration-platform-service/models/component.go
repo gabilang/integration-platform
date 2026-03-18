@@ -77,6 +77,12 @@ type ComponentWorkflowConfig struct {
 	Parameters       map[string]any            `json:"parameters,omitempty"`
 }
 
+// UpdateBuildParametersRequest holds the fields that can be changed after a component is created.
+// Only the workflow configuration (repository, build type, parameters) is mutable.
+type UpdateBuildParametersRequest struct {
+	Workflow *ComponentWorkflowConfig `json:"workflow"`
+}
+
 // CreateComponentRequest matches the platform-api-service component creation format.
 // The body is forwarded as-is after extracting the component name for routing.
 type CreateComponentRequest struct {
