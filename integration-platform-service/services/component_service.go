@@ -7,25 +7,34 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/gabilang/integration-platform/integration-platform-service/clients/observability"
 	"github.com/gabilang/integration-platform/integration-platform-service/clients/openchoreo"
 	"github.com/gabilang/integration-platform/integration-platform-service/clients/requests"
 	"github.com/gabilang/integration-platform/integration-platform-service/models"
 )
 
-var ErrComponentNotFound = errors.New("component not found")
+var (
+	ErrComponentNotFound = errors.New("component not found")
+	ErrBuildNotFound     = errors.New("build not found")
+	ErrLogsUnavailable   = errors.New("observability service not configured")
+)
 
 // ComponentService handles business logic for component operations.
 type ComponentService interface {
 	ListComponents(ctx context.Context, orgName, projectName string, limit int, cursor string) (*models.ComponentList, error)
 	CreateComponent(ctx context.Context, orgName, projectName string, req *models.CreateComponentRequest) (*models.CreateComponentResponse, error)
+	ListBuilds(ctx context.Context, orgName, projectName, componentName string, limit int, cursor string) (*models.WorkflowRunList, error)
+	GetBuildStatus(ctx context.Context, orgName, projectName, componentName, buildName string) (*models.WorkflowRun, error)
+	GetBuildLogs(ctx context.Context, orgName, projectName, componentName, buildName string) (*models.BuildLogs, error)
 }
 
 type componentService struct {
-	client openchoreo.ComponentClient
+	client       openchoreo.ComponentClient
+	observClient observability.Client
 }
 
-func NewComponentService(client openchoreo.ComponentClient) ComponentService {
-	return &componentService{client: client}
+func NewComponentService(client openchoreo.ComponentClient, observClient observability.Client) ComponentService {
+	return &componentService{client: client, observClient: observClient}
 }
 
 func (s *componentService) ListComponents(ctx context.Context, orgName, projectName string, limit int, cursor string) (*models.ComponentList, error) {
@@ -62,6 +71,33 @@ func (s *componentService) CreateComponent(ctx context.Context, orgName, project
 	}, nil
 }
 
+func (s *componentService) ListBuilds(ctx context.Context, orgName, projectName, componentName string, limit int, cursor string) (*models.WorkflowRunList, error) {
+	list, err := s.client.ListWorkflowRuns(ctx, orgName, projectName, componentName, limit, cursor)
+	if err != nil {
+		return nil, translateComponentHTTPError(err)
+	}
+	return list, nil
+}
+
+func (s *componentService) GetBuildStatus(ctx context.Context, orgName, projectName, componentName, buildName string) (*models.WorkflowRun, error) {
+	run, err := s.client.GetWorkflowRun(ctx, orgName, projectName, componentName, buildName)
+	if err != nil {
+		return nil, translateComponentHTTPError(err)
+	}
+	return run, nil
+}
+
+func (s *componentService) GetBuildLogs(ctx context.Context, orgName, projectName, componentName, buildName string) (*models.BuildLogs, error) {
+	if s.observClient == nil {
+		return nil, ErrLogsUnavailable
+	}
+	logs, err := s.observClient.GetBuildLogs(ctx, orgName, projectName, componentName, buildName)
+	if err != nil {
+		return nil, fmt.Errorf("get build logs: %w", err)
+	}
+	return logs, nil
+}
+
 func translateComponentHTTPError(err error) error {
 	if err == nil {
 		return nil
@@ -71,6 +107,22 @@ func translateComponentHTTPError(err error) error {
 		switch httpErr.StatusCode {
 		case http.StatusNotFound:
 			return fmt.Errorf("%w: %s", ErrComponentNotFound, httpErr.Body)
+		case http.StatusUnauthorized:
+			return ErrUnauthorized
+		}
+	}
+	return err
+}
+
+func translateBuildHTTPError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var httpErr *requests.HttpError
+	if errors.As(err, &httpErr) {
+		switch httpErr.StatusCode {
+		case http.StatusNotFound:
+			return fmt.Errorf("%w: %s", ErrBuildNotFound, httpErr.Body)
 		case http.StatusUnauthorized:
 			return ErrUnauthorized
 		}

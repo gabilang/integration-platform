@@ -15,6 +15,8 @@ type ComponentClient interface {
 	ListComponents(ctx context.Context, orgName, projectName string, limit int, cursor string) (*models.ComponentList, error)
 	CreateComponent(ctx context.Context, orgName, projectName string, req *models.CreateComponentRequest) (*models.Component, error)
 	TriggerBuild(ctx context.Context, orgName, projectName, componentName string) (*models.WorkflowRun, error)
+	ListWorkflowRuns(ctx context.Context, orgName, projectName, componentName string, limit int, cursor string) (*models.WorkflowRunList, error)
+	GetWorkflowRun(ctx context.Context, orgName, projectName, componentName, runName string) (*models.WorkflowRun, error)
 }
 
 type componentClient struct {
@@ -38,6 +40,10 @@ func (c *componentClient) workflowRunsURL(projectName, componentName string) str
 	return fmt.Sprintf("%s/projects/%s/components/%s/workflow-runs", c.baseURL, projectName, componentName)
 }
 
+func (c *componentClient) workflowRunURL(projectName, componentName, runName string) string {
+	return fmt.Sprintf("%s/projects/%s/components/%s/workflow-runs/%s", c.baseURL, projectName, componentName, runName)
+}
+
 func (c *componentClient) newRequest(ctx context.Context, name, method, url string) *requests.HttpRequest {
 	req := requests.NewRequest(name, method, url)
 	if token := middleware.GetAuthToken(ctx); token != "" {
@@ -59,6 +65,11 @@ type platformComponentResponse struct {
 // platformWorkflowRunResponse is the envelope for workflow run responses.
 type platformWorkflowRunResponse struct {
 	Data models.WorkflowRun `json:"data"`
+}
+
+// platformWorkflowRunListResponse is the envelope for workflow run list responses.
+type platformWorkflowRunListResponse struct {
+	Data models.WorkflowRunList `json:"data"`
 }
 
 // ListComponents returns all components belonging to the given project.
@@ -104,6 +115,36 @@ func (c *componentClient) TriggerBuild(ctx context.Context, _, projectName, comp
 	var envelope platformWorkflowRunResponse
 	if err := result.ScanResponse(&envelope, http.StatusCreated); err != nil {
 		return nil, fmt.Errorf("trigger build: %w", err)
+	}
+	return &envelope.Data, nil
+}
+
+// ListWorkflowRuns returns all workflow runs for the given component.
+func (c *componentClient) ListWorkflowRuns(ctx context.Context, _, projectName, componentName string, limit int, cursor string) (*models.WorkflowRunList, error) {
+	httpReq := c.newRequest(ctx, "openchoreo.ListWorkflowRuns", http.MethodGet, c.workflowRunsURL(projectName, componentName))
+	if limit > 0 {
+		httpReq.SetQuery("limit", fmt.Sprintf("%d", limit))
+	}
+	if cursor != "" {
+		httpReq.SetQuery("cursor", cursor)
+	}
+
+	result := requests.SendRequest(ctx, c.httpClient, httpReq)
+	var envelope platformWorkflowRunListResponse
+	if err := result.ScanResponse(&envelope, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("list workflow runs: %w", err)
+	}
+	return &envelope.Data, nil
+}
+
+// GetWorkflowRun returns a specific workflow run for the given component.
+func (c *componentClient) GetWorkflowRun(ctx context.Context, _, projectName, componentName, runName string) (*models.WorkflowRun, error) {
+	httpReq := c.newRequest(ctx, "openchoreo.GetWorkflowRun", http.MethodGet, c.workflowRunURL(projectName, componentName, runName))
+
+	result := requests.SendRequest(ctx, c.httpClient, httpReq)
+	var envelope platformWorkflowRunResponse
+	if err := result.ScanResponse(&envelope, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("get workflow run: %w", err)
 	}
 	return &envelope.Data, nil
 }

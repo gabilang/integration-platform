@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gabilang/integration-platform/integration-platform-service/api"
+	"github.com/gabilang/integration-platform/integration-platform-service/clients/observability"
 	"github.com/gabilang/integration-platform/integration-platform-service/clients/openchoreo"
 	"github.com/gabilang/integration-platform/integration-platform-service/config"
 	"github.com/gabilang/integration-platform/integration-platform-service/controllers"
@@ -32,7 +33,11 @@ func main() {
 	projectController := controllers.NewProjectController(projectService)
 
 	componentClient := openchoreo.NewComponentClient(cfg.PlatformAPI.BaseURL)
-	componentService := services.NewComponentService(componentClient)
+	var observClient observability.Client
+	if cfg.Observability.BaseURL != "" {
+		observClient = observability.NewClient(cfg.Observability.BaseURL)
+	}
+	componentService := services.NewComponentService(componentClient, observClient)
 	componentController := controllers.NewComponentController(componentService)
 
 	handler := api.NewHandler(api.AppParams{

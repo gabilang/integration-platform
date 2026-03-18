@@ -30,6 +30,9 @@ func Load() (Config, error) {
 		PlatformAPI: PlatformAPIConfig{
 			BaseURL: r.readRequiredString("PLATFORM_API_SERVICE_BASE_URL"),
 		},
+		Observability: ObservabilityConfig{
+			BaseURL: r.readOptionalString("OBSERVABILITY_SERVICE_BASE_URL", ""),
+		},
 	}
 
 	if len(r.errors) > 0 {

@@ -16,6 +16,9 @@ import (
 type ComponentController interface {
 	ListComponents(w http.ResponseWriter, r *http.Request)
 	CreateComponent(w http.ResponseWriter, r *http.Request)
+	ListBuilds(w http.ResponseWriter, r *http.Request)
+	GetBuildStatus(w http.ResponseWriter, r *http.Request)
+	GetBuildLogs(w http.ResponseWriter, r *http.Request)
 }
 
 type componentController struct {
@@ -83,4 +86,90 @@ func (c *componentController) CreateComponent(w http.ResponseWriter, r *http.Req
 	}
 
 	utils.WriteSuccessResponse(w, http.StatusCreated, resp)
+}
+
+func (c *componentController) ListBuilds(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	org := claims.OrgHandle
+	projectName := r.PathValue("projectName")
+	componentName := r.PathValue("componentName")
+	cursor := r.URL.Query().Get("cursor")
+
+	list, err := c.service.ListBuilds(r.Context(), org, projectName, componentName, 20, cursor)
+	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		slog.ErrorContext(r.Context(), "list builds failed",
+			"error", err, "org", org, "project", projectName, "component", componentName)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to list builds")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusOK, list)
+}
+
+func (c *componentController) GetBuildStatus(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	org := claims.OrgHandle
+	projectName := r.PathValue("projectName")
+	componentName := r.PathValue("componentName")
+	buildName := r.PathValue("buildName")
+
+	run, err := c.service.GetBuildStatus(r.Context(), org, projectName, componentName, buildName)
+	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		if errors.Is(err, services.ErrBuildNotFound) {
+			utils.WriteErrorResponse(w, http.StatusNotFound, "build not found")
+			return
+		}
+		slog.ErrorContext(r.Context(), "get build status failed",
+			"error", err, "org", org, "project", projectName, "component", componentName, "build", buildName)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to get build status")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusOK, run)
+}
+
+func (c *componentController) GetBuildLogs(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	org := claims.OrgHandle
+	projectName := r.PathValue("projectName")
+	componentName := r.PathValue("componentName")
+	buildName := r.PathValue("buildName")
+
+	logs, err := c.service.GetBuildLogs(r.Context(), org, projectName, componentName, buildName)
+	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		if errors.Is(err, services.ErrLogsUnavailable) {
+			utils.WriteErrorResponse(w, http.StatusServiceUnavailable, "build logs service not available")
+			return
+		}
+		slog.ErrorContext(r.Context(), "get build logs failed",
+			"error", err, "org", org, "project", projectName, "component", componentName, "build", buildName)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to get build logs")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusOK, logs)
 }

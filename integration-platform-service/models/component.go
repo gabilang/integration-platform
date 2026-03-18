@@ -23,9 +23,33 @@ type ComponentList struct {
 
 // WorkflowRun represents a triggered component build/workflow run.
 type WorkflowRun struct {
-	Name      string `json:"name,omitempty"`
-	Status    string `json:"status,omitempty"`
-	StartedAt string `json:"startedAt,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Status        string `json:"status,omitempty"`
+	StartedAt     string `json:"startedAt,omitempty"`
+	CompletedAt   string `json:"completedAt,omitempty"`
+	ComponentName string `json:"componentName,omitempty"`
+	ProjectName   string `json:"projectName,omitempty"`
+	Image         string `json:"image,omitempty"`
+	Commit        string `json:"commit,omitempty"`
+}
+
+// WorkflowRunList is the paginated list of workflow runs.
+type WorkflowRunList struct {
+	Items      []WorkflowRun `json:"items"`
+	TotalCount int           `json:"totalCount,omitempty"`
+}
+
+// BuildLogEntry is a single log line from a build.
+type BuildLogEntry struct {
+	Timestamp string `json:"timestamp,omitempty"`
+	Log       string `json:"log"`
+	Level     string `json:"level,omitempty"`
+}
+
+// BuildLogs is the response for build log queries.
+type BuildLogs struct {
+	Logs       []BuildLogEntry `json:"logs"`
+	TotalCount int             `json:"totalCount,omitempty"`
 }
 
 // WorkflowRevision is the git revision used by a component workflow.
