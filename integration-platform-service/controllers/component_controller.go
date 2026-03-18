@@ -16,6 +16,7 @@ import (
 type ComponentController interface {
 	ListComponents(w http.ResponseWriter, r *http.Request)
 	CreateComponent(w http.ResponseWriter, r *http.Request)
+	TriggerBuild(w http.ResponseWriter, r *http.Request)
 	ListBuilds(w http.ResponseWriter, r *http.Request)
 	GetBuildStatus(w http.ResponseWriter, r *http.Request)
 	GetBuildLogs(w http.ResponseWriter, r *http.Request)
@@ -86,6 +87,35 @@ func (c *componentController) CreateComponent(w http.ResponseWriter, r *http.Req
 	}
 
 	utils.WriteSuccessResponse(w, http.StatusCreated, resp)
+}
+
+func (c *componentController) TriggerBuild(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	org := claims.OrgHandle
+	projectName := r.PathValue("projectName")
+	componentName := r.PathValue("componentName")
+
+	run, err := c.service.TriggerBuild(r.Context(), org, projectName, componentName)
+	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		if errors.Is(err, services.ErrComponentNotFound) {
+			utils.WriteErrorResponse(w, http.StatusNotFound, "component not found")
+			return
+		}
+		slog.ErrorContext(r.Context(), "trigger build failed",
+			"error", err, "org", org, "project", projectName, "component", componentName)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to trigger build")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusCreated, run)
 }
 
 func (c *componentController) ListBuilds(w http.ResponseWriter, r *http.Request) {
