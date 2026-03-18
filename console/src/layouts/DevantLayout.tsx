@@ -10,33 +10,42 @@ import {
   Footer,
   Header,
   IconButton,
+  Menu,
+  MenuItem,
   Sidebar,
   Stack,
   UserMenu,
+  useTheme,
 } from '@wso2/oxygen-ui';
 import {
   BarChart3,
   Building,
   ChevronRight,
+  ChevronRightCircle,
   Compass,
   FlaskConical,
   LayoutDashboard,
+  Plus,
   Rocket,
   ScrollText,
   Settings,
   Shield,
   Workflow,
   Wrench,
+  X,
 } from '@wso2/oxygen-ui-icons-react';
 import { useAsgardeo } from '../auth';
 import { useUserClaims } from '../auth/useUserClaims';
 import { env } from '../config/env';
-import { getDefaultOrganizationId, getIntegration, getOrganization, getOrganizations, getProject } from '../data/mockData';
+import { getDefaultOrganizationId, getOrganizations } from '../data/mockData';
+import { useProjects } from '../services/api/namespaces/projects/hooks';
+import { useComponents } from '../services/api/namespaces/components/hooks';
 import {
   integrationBuildPath,
   integrationDeployPath,
   integrationOverviewPath,
   organizationOverviewPath,
+  projectCreatePath,
   projectOverviewPath,
 } from '../lib/paths';
 
@@ -47,59 +56,52 @@ function normalizeClaimValue(value: string): string {
 export default function DevantLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useTheme();
   const { signOut } = useAsgardeo();
   const { claims } = useUserClaims();
   const { orgId, projectId, integrationId } = useParams();
 
   const [collapsed, setCollapsed] = useState(false);
+  const [projectAnchorEl, setProjectAnchorEl] = useState<null | HTMLElement>(null);
+  const [integrationAnchorEl, setIntegrationAnchorEl] = useState<null | HTMLElement>(null);
+  const projectMenuOpen = Boolean(projectAnchorEl);
+  const integrationMenuOpen = Boolean(integrationAnchorEl);
+
+  // Organizations come from the runtime store (populated in App.tsx from real API + JWT claims).
   const organizations = getOrganizations();
 
   const selectedOrg = useMemo(() => {
-    const fallbackOrganization = organizations[0];
-    if (!fallbackOrganization) {
-      return undefined;
-    }
-
-    if (!orgId) {
-      return getOrganization(getDefaultOrganizationId()) ?? fallbackOrganization;
-    }
-    return getOrganization(orgId) ?? fallbackOrganization;
+    const fallback = organizations[0];
+    if (!fallback) return undefined;
+    if (!orgId) return getOrganizations().find(o => o.id === getDefaultOrganizationId()) ?? fallback;
+    return organizations.find(o => o.id === orgId) ?? fallback;
   }, [orgId, organizations]);
+
+  // Real API hooks for projects and components.
+  const { projects } = useProjects(selectedOrg?.id);
+  const { components } = useComponents(selectedOrg?.id, projectId);
+
+  const selectedProject = useMemo(() => {
+    return projects.find(p => p.name === projectId);
+  }, [projects, projectId]);
+
+  const selectedIntegration = useMemo(() => {
+    return components.find(c => c.name === integrationId);
+  }, [components, integrationId]);
 
   if (!selectedOrg) {
     return null;
   }
 
-  const selectedProject = useMemo(() => {
-    if (!selectedOrg.projects.length) {
-      return undefined;
-    }
-    if (!projectId) {
-      return selectedOrg.projects[0];
-    }
-    return getProject(selectedOrg.id, projectId) ?? selectedOrg.projects[0];
-  }, [projectId, selectedOrg]);
-
-  const selectedIntegration = useMemo(() => {
-    if (!selectedProject?.integrations.length) {
-      return undefined;
-    }
-    if (!integrationId) {
-      return selectedProject.integrations[0];
-    }
-    return getIntegration(selectedOrg.id, selectedProject.id, integrationId) ?? selectedProject.integrations[0];
-  }, [integrationId, selectedOrg.id, selectedProject]);
-
+  const routeOrgId = orgId ?? selectedOrg.id;
+  const routeProjectId = projectId ?? '';
+  const routeIntegrationId = integrationId ?? '';
+  const hasIntegrationRouteParams = Boolean(orgId && projectId && integrationId);
   const inProjectLevel = Boolean(projectId);
   const inIntegrationLevel = Boolean(projectId && integrationId);
-  const inOrganizationLevel = !inProjectLevel;
-  const hasIntegrationRouteParams = Boolean(orgId && projectId && integrationId);
-  const routeOrgId = orgId ?? selectedOrg.id;
-  const routeProjectId = projectId ?? selectedProject?.id ?? '';
-  const routeIntegrationId = integrationId ?? selectedIntegration?.id ?? '';
 
-  const orgPath = organizationOverviewPath(selectedOrg.id);
-  const projectPath = selectedProject ? projectOverviewPath(selectedOrg.id, selectedProject.id) : orgPath;
+  const orgPath = organizationOverviewPath(routeOrgId);
+  const projectPath = routeProjectId ? projectOverviewPath(routeOrgId, routeProjectId) : orgPath;
   const integrationPath = hasIntegrationRouteParams
     ? integrationOverviewPath(routeOrgId, routeProjectId, routeIntegrationId)
     : projectPath;
@@ -109,18 +111,8 @@ export default function DevantLayout() {
   const integrationDeployRoute = hasIntegrationRouteParams
     ? integrationDeployPath(routeOrgId, routeProjectId, routeIntegrationId)
     : integrationPath;
-  const integrationSelectorItems: Array<{ id: string; name: string; type: string; description?: string }> =
-    selectedProject?.integrations.length
-      ? selectedProject.integrations.map((integration) => ({
-          id: integration.id,
-          name: integration.name,
-          type: integration.type,
-          description: integration.description,
-        }))
-      : integrationId
-        ? [{ id: integrationId, name: integrationId, type: 'Component' }]
-        : [];
-  const activeSidebarItem = useMemo(() => {
+
+  const activeSidebarItem = (() => {
     if (
       matchPath('/organizations/:orgId/projects/:projectId/integrations/:integrationId/build/*', location.pathname) ||
       location.pathname.endsWith('/build')
@@ -134,7 +126,7 @@ export default function DevantLayout() {
       return 'deploy';
     }
     return 'overview';
-  }, [location.pathname]);
+  })();
 
   const handleLogout = async () => {
     try {
@@ -171,10 +163,10 @@ export default function DevantLayout() {
   const selectedOrganizationLabel =
     tokenOrganizationLabel && doesOrganizationMatchToken(selectedOrg) ? tokenOrganizationLabel : selectedOrg.name;
 
-  const renderValueWithLabel = (label: string, value: string, icon: ReactNode) => (
+  const renderOrgValue = (label: string, icon: ReactNode) => (
     <>
       <ComplexSelect.MenuItem.Icon>{icon}</ComplexSelect.MenuItem.Icon>
-      <ComplexSelect.MenuItem.Text primary={value} secondary={label} />
+      <ComplexSelect.MenuItem.Text primary={label} />
     </>
   );
 
@@ -192,78 +184,213 @@ export default function DevantLayout() {
 
           <Header.Switchers showDivider={false}>
             <Stack direction="row" alignItems="center" gap={0.5}>
+              {/* Organization selector — always shown */}
               <ComplexSelect
                 value={selectedOrg.id}
                 onChange={(event) => navigate(organizationOverviewPath(String(event.target.value)))}
                 size="small"
                 sx={{ minWidth: 220 }}
-                renderValue={() => renderValueWithLabel('Organization', selectedOrganizationLabel, <Building size={16} />)}
+                renderValue={() => renderOrgValue(selectedOrganizationLabel, <Building size={16} />)}
                 label="Organizations"
               >
                 {organizations.map((organization) => (
                   <ComplexSelect.MenuItem key={organization.id} value={organization.id}>
-                    {renderValueWithLabel(
-                      'Organization',
-                      tokenOrganizationLabel && doesOrganizationMatchToken(organization)
-                        ? tokenOrganizationLabel
-                        : organization.name,
+                    <ComplexSelect.MenuItem.Icon>
                       <Building size={16} />
-                    )}
+                    </ComplexSelect.MenuItem.Icon>
+                    <ComplexSelect.MenuItem.Text
+                      primary={
+                        tokenOrganizationLabel && doesOrganizationMatchToken(organization)
+                          ? tokenOrganizationLabel
+                          : organization.name
+                      }
+                    />
                   </ComplexSelect.MenuItem>
                 ))}
               </ComplexSelect>
 
-              {inOrganizationLevel && selectedProject && (
-                <IconButton size="small" onClick={() => navigate(projectPath)}>
-                  <ChevronRight size={14} />
-                </IconButton>
+              {/* Project selector */}
+              {selectedProject ? (
+                <Box position="relative">
+                  <ComplexSelect
+                    value={projectId}
+                    onChange={(event) =>
+                      navigate(projectOverviewPath(routeOrgId, String(event.target.value)))
+                    }
+                    size="small"
+                    sx={{ minWidth: 190 }}
+                    renderValue={() => (
+                      <>
+                        <ComplexSelect.MenuItem.Icon>
+                          <Compass size={16} />
+                        </ComplexSelect.MenuItem.Icon>
+                        <ComplexSelect.MenuItem.Text primary={selectedProject.displayName || selectedProject.name} />
+                      </>
+                    )}
+                    label="Projects"
+                  >
+                    <ComplexSelect.MenuItem
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        navigate(projectCreatePath(routeOrgId));
+                      }}
+                    >
+                      <ComplexSelect.MenuItem.Icon>
+                        <Plus size={16} />
+                      </ComplexSelect.MenuItem.Icon>
+                      <ComplexSelect.MenuItem.Text primary="Create a Project" />
+                    </ComplexSelect.MenuItem>
+                    {projects.map((project) => (
+                      <ComplexSelect.MenuItem key={project.name} value={project.name}>
+                        <ComplexSelect.MenuItem.Icon>
+                          <Compass size={16} />
+                        </ComplexSelect.MenuItem.Icon>
+                        <ComplexSelect.MenuItem.Text
+                          primary={project.displayName || project.name}
+                          secondary={project.description}
+                        />
+                      </ComplexSelect.MenuItem>
+                    ))}
+                  </ComplexSelect>
+                  <Box position="absolute" right={0} top={-2}>
+                    <IconButton
+                      size="small"
+                      sx={{ color: theme.vars?.palette.text.disabled }}
+                      onClick={() => navigate(orgPath)}
+                    >
+                      <X size={12} />
+                    </IconButton>
+                  </Box>
+                </Box>
+              ) : (
+                <>
+                  <IconButton
+                    onClick={(e) => setProjectAnchorEl(e.currentTarget)}
+                    size="small"
+                    sx={{
+                      transform: projectMenuOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s',
+                    }}
+                  >
+                    <ChevronRightCircle size={20} />
+                  </IconButton>
+                  <Menu
+                    anchorEl={projectAnchorEl}
+                    open={projectMenuOpen}
+                    onClose={() => setProjectAnchorEl(null)}
+                  >
+                    <MenuItem
+                      onClick={() => {
+                        setProjectAnchorEl(null);
+                        navigate(projectCreatePath(routeOrgId));
+                      }}
+                    >
+                      <Plus size={16} style={{ marginRight: 8 }} />
+                      Create a Project
+                    </MenuItem>
+                    {projects.map((project) => (
+                      <MenuItem
+                        key={project.name}
+                        onClick={() => {
+                          setProjectAnchorEl(null);
+                          navigate(projectOverviewPath(routeOrgId, project.name));
+                        }}
+                      >
+                        <Compass size={16} style={{ marginRight: 8 }} />
+                        {project.displayName || project.name}
+                      </MenuItem>
+                    ))}
+                  </Menu>
+                </>
+              )}
+
+              {/* Integration selector — shown once a project is selected */}
+              {inProjectLevel && (
+                <>
+                  {selectedIntegration ? (
+                    <Box position="relative">
+                      <ComplexSelect
+                        value={integrationId}
+                        onChange={(event) =>
+                          navigate(
+                            integrationOverviewPath(routeOrgId, routeProjectId, String(event.target.value))
+                          )
+                        }
+                        size="small"
+                        sx={{ minWidth: 190 }}
+                        renderValue={() => (
+                          <>
+                            <ComplexSelect.MenuItem.Icon>
+                              <Workflow size={16} />
+                            </ComplexSelect.MenuItem.Icon>
+                            <ComplexSelect.MenuItem.Text
+                              primary={selectedIntegration.displayName || selectedIntegration.name}
+                            />
+                          </>
+                        )}
+                        label="Integrations"
+                      >
+                        {components.map((component) => (
+                          <ComplexSelect.MenuItem key={component.name} value={component.name}>
+                            <ComplexSelect.MenuItem.Icon>
+                              <Workflow size={16} />
+                            </ComplexSelect.MenuItem.Icon>
+                            <ComplexSelect.MenuItem.Text
+                              primary={component.displayName || component.name}
+                              secondary={component.type}
+                            />
+                          </ComplexSelect.MenuItem>
+                        ))}
+                      </ComplexSelect>
+                      <Box position="absolute" right={0} top={-2}>
+                        <IconButton
+                          size="small"
+                          sx={{ color: theme.vars?.palette.text.disabled }}
+                          onClick={() => navigate(projectPath)}
+                        >
+                          <X size={12} />
+                        </IconButton>
+                      </Box>
+                    </Box>
+                  ) : (
+                    <>
+                      <IconButton
+                        onClick={(e) => setIntegrationAnchorEl(e.currentTarget)}
+                        size="small"
+                        sx={{
+                          transform: integrationMenuOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s',
+                        }}
+                      >
+                        <ChevronRightCircle size={20} />
+                      </IconButton>
+                      <Menu
+                        anchorEl={integrationAnchorEl}
+                        open={integrationMenuOpen}
+                        onClose={() => setIntegrationAnchorEl(null)}
+                      >
+                        {components.length === 0 && (
+                          <MenuItem disabled>No integrations yet</MenuItem>
+                        )}
+                        {components.map((component) => (
+                          <MenuItem
+                            key={component.name}
+                            onClick={() => {
+                              setIntegrationAnchorEl(null);
+                              navigate(integrationOverviewPath(routeOrgId, routeProjectId, component.name));
+                            }}
+                          >
+                            <Workflow size={16} style={{ marginRight: 8 }} />
+                            {component.displayName || component.name}
+                          </MenuItem>
+                        ))}
+                      </Menu>
+                    </>
+                  )}
+                </>
               )}
             </Stack>
-
-            {inProjectLevel && selectedProject && (
-              <Stack direction="row" alignItems="center" gap={0.5}>
-                <ComplexSelect
-                  value={selectedProject.id}
-                  onChange={(event) => navigate(projectOverviewPath(selectedOrg.id, String(event.target.value)))}
-                  size="small"
-                  sx={{ minWidth: 190 }}
-                  renderValue={() => renderValueWithLabel('Project', selectedProject.name, <Compass size={16} />)}
-                  label="Projects"
-                >
-                  {selectedOrg.projects.map((project) => (
-                    <ComplexSelect.MenuItem key={project.id} value={project.id}>
-                      <ComplexSelect.MenuItem.Text primary={project.name} secondary={project.description} />
-                    </ComplexSelect.MenuItem>
-                  ))}
-                </ComplexSelect>
-                <IconButton size="small" onClick={() => navigate(projectPath)}>
-                  <ChevronRight size={14} />
-                </IconButton>
-              </Stack>
-            )}
-
-            {inIntegrationLevel && selectedProject && (
-              <Stack direction="row" alignItems="center" gap={0.5}>
-                <ComplexSelect
-                  value={integrationId || selectedIntegration?.id || ''}
-                  onChange={(event) =>
-                    navigate(integrationOverviewPath(selectedOrg.id, selectedProject.id, String(event.target.value)))
-                  }
-                  size="small"
-                  sx={{ minWidth: 190 }}
-                  renderValue={() =>
-                    renderValueWithLabel('Integration', selectedIntegration?.name || integrationId || 'Component', <Workflow size={16} />)
-                  }
-                  label="Integrations"
-                >
-                  {integrationSelectorItems.map((integration) => (
-                    <ComplexSelect.MenuItem key={integration.id} value={integration.id}>
-                      <ComplexSelect.MenuItem.Text primary={integration.name} secondary={integration.type} />
-                    </ComplexSelect.MenuItem>
-                  ))}
-                </ComplexSelect>
-              </Stack>
-            )}
           </Header.Switchers>
 
           <Header.Spacer />
