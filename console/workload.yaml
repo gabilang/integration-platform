@@ -5,5 +5,7 @@ metadata:
 
 endpoints:
   - name: devant-console-http
-    port: 80
+    visibility:
+      - external
+    port: 8080
     type: HTTP
