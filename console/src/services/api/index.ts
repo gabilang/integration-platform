@@ -11,7 +11,7 @@
 // ---------------------------------------------------------------------------
 // Client & types
 // ---------------------------------------------------------------------------
-export { openchoreoClient, setToken } from './client';
+export { openchoreoClient, setTokenAccessor } from './client';
 export type { PaginationParams } from './client';
 export type * from './types';
 

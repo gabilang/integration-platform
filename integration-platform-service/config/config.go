@@ -5,8 +5,6 @@ type Config struct {
 	ServerPort int
 	LogLevel   string
 
-	CORSAllowedOrigins string
-
 	PlatformAPI   PlatformAPIConfig
 	Observability ObservabilityConfig
 }

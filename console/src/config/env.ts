@@ -37,7 +37,7 @@ const thunderUrl = getEnv('VITE_THUNDER_URL') || platformIdpUrl;
 
 export const env = {
   VITE_PLATFORM_IDP_URL: platformIdpUrl,
-  VITE_CORE_DP_API_BASE_URL: getEnv('VITE_CORE_DP_API_BASE_URL') || '/platform-api-service/wso2cloud-dp',
+  VITE_CORE_DP_API_BASE_URL: getEnv('VITE_CORE_DP_API_BASE_URL') || '/integration-platform-api-service',
 
   VITE_THUNDER_URL: thunderUrl,
   VITE_THUNDER_APP_ID: getEnv('VITE_THUNDER_APP_ID') || '',

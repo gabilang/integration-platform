@@ -23,10 +23,9 @@ func Load() (Config, error) {
 
 	r := &configReader{}
 	cfg := Config{
-		ServerHost:         r.readOptionalString("SERVER_HOST", "0.0.0.0"),
-		ServerPort:         r.readOptionalInt("SERVER_PORT", 8080),
-		LogLevel:           r.readOptionalString("LOG_LEVEL", "info"),
-		CORSAllowedOrigins: r.readOptionalString("CORS_ALLOWED_ORIGINS", "*"),
+		ServerHost: r.readOptionalString("SERVER_HOST", "0.0.0.0"),
+		ServerPort: r.readOptionalInt("SERVER_PORT", 8080),
+		LogLevel:   r.readOptionalString("LOG_LEVEL", "info"),
 		PlatformAPI: PlatformAPIConfig{
 			BaseURL: r.readRequiredString("PLATFORM_API_SERVICE_BASE_URL"),
 		},

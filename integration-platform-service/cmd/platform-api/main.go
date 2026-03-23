@@ -41,7 +41,6 @@ func main() {
 	componentController := controllers.NewComponentController(componentService)
 
 	handler := api.NewHandler(api.AppParams{
-		CORSAllowedOrigins:  cfg.CORSAllowedOrigins,
 		ProjectController:   projectController,
 		ComponentController: componentController,
 	})

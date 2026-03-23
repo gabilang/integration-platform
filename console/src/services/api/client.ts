@@ -32,11 +32,19 @@ import { env } from '../../config/env';
 const BASE_URL = env.VITE_CORE_DP_API_BASE_URL;
 
 // eslint-disable-next-line @typescript-eslint/naming-convention, no-underscore-dangle
-let _accessToken = '';
+let _getAccessToken: (() => Promise<string>) | null = null;
 
-/** Set the Bearer token used for all subsequent requests. */
-export function setToken(token: string): void {
-  _accessToken = token;
+/**
+ * Set a lazy accessor for the Bearer token.
+ *
+ * Pass a function that resolves the current access token (e.g. Asgardeo's
+ * `getAccessToken`). The function is called on every request so the auth
+ * library can transparently refresh the token between calls.
+ *
+ * Call with `null` to clear the accessor (e.g. after sign-out).
+ */
+export function setTokenAccessor(fn: (() => Promise<string>) | null): void {
+  _getAccessToken = fn;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,8 +110,11 @@ async function request<T>(
     'Content-Type': 'application/json',
     Accept: 'application/json',
   };
-  if (_accessToken) {
-    headers.Authorization = `Bearer ${_accessToken}`;
+  if (_getAccessToken) {
+    const token = await _getAccessToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
   }
 
   const init: RequestInit = { method, headers };

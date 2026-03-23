@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { Box, CircularProgress } from '@wso2/oxygen-ui';
-import { setToken, type OrganizationUnit, useOrganizations } from './services/api';
+import { setTokenAccessor, type OrganizationUnit, useOrganizations } from './services/api';
 import { isBypassEnabled, useAsgardeo } from './auth';
 import { useUserClaims } from './auth/useUserClaims';
 import { getDefaultOrganizationId, organizations as mockOrganizations, setRuntimeOrganizations, type OrganizationRecord } from './data/mockData';
@@ -201,24 +201,14 @@ export function App() {
   }, [apiOrganizations, claims]);
   setRuntimeOrganizations(runtimeOrganizations);
 
-  useEffect(() => {
-    const synchronizeAccessToken = async () => {
-      if (!isSignedIn) {
-        setToken('');
-        return;
-      }
-
-      try {
-        const accessToken = await getAccessToken();
-        setToken(accessToken || '');
-      } catch (error) {
-        console.error('[Devant App] Failed to load access token for OpenChoreo API:', error);
-        setToken('');
-      }
-    };
-
-    void synchronizeAccessToken();
-  }, [getAccessToken, isSignedIn]);
+  // Set the token accessor synchronously during render so child components can
+  // include the Bearer token in API calls on their first render, without waiting
+  // for a useEffect to fire after the render cycle.
+  if (isSignedIn) {
+    setTokenAccessor(getAccessToken);
+  } else {
+    setTokenAccessor(null);
+  }
 
   useEffect(() => {
     const validateToken = async () => {

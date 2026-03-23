@@ -11,7 +11,6 @@ import (
 
 // AppParams holds all dependencies needed to build the HTTP handler.
 type AppParams struct {
-	CORSAllowedOrigins  string
 	ProjectController   controllers.ProjectController
 	ComponentController controllers.ComponentController
 }
@@ -38,7 +37,6 @@ func NewHandler(params AppParams) http.Handler {
 	handler = middleware.ExtractAuthToken()(handler)
 	handler = logger.RequestLogger()(handler)
 	handler = middleware.AddCorrelationID()(handler)
-	handler = middleware.CORS(params.CORSAllowedOrigins)(handler)
 	handler = middleware.RecovererOnPanic()(handler)
 
 	return handler
