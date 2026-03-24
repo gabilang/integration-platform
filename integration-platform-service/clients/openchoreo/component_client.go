@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gabilang/integration-platform/integration-platform-service/clients/requests"
 	"github.com/gabilang/integration-platform/integration-platform-service/middleware"
@@ -33,20 +34,20 @@ func NewComponentClient(baseURL string) ComponentClient {
 	}
 }
 
-func (c *componentClient) componentsURL(projectName string) string {
-	return fmt.Sprintf("%s/projects/%s/components", c.baseURL, projectName)
+func (c *componentClient) componentsURL() string {
+	return c.baseURL + "/components"
 }
 
-func (c *componentClient) componentURL(projectName, componentName string) string {
-	return fmt.Sprintf("%s/projects/%s/components/%s", c.baseURL, projectName, componentName)
+func (c *componentClient) componentURL(componentName string) string {
+	return fmt.Sprintf("%s/components/%s", c.baseURL, componentName)
 }
 
-func (c *componentClient) workflowRunsURL(projectName, componentName string) string {
-	return fmt.Sprintf("%s/projects/%s/components/%s/workflow-runs", c.baseURL, projectName, componentName)
+func (c *componentClient) workflowRunsURL() string {
+	return c.baseURL + "/workflowruns"
 }
 
-func (c *componentClient) workflowRunURL(projectName, componentName, runName string) string {
-	return fmt.Sprintf("%s/projects/%s/components/%s/workflow-runs/%s", c.baseURL, projectName, componentName, runName)
+func (c *componentClient) workflowRunURL(runName string) string {
+	return fmt.Sprintf("%s/workflowruns/%s", c.baseURL, runName)
 }
 
 func (c *componentClient) newRequest(ctx context.Context, name, method, url string) *requests.HttpRequest {
@@ -57,29 +58,180 @@ func (c *componentClient) newRequest(ctx context.Context, name, method, url stri
 	return req
 }
 
-// platformComponentListResponse is the envelope for component list responses.
-type platformComponentListResponse struct {
-	Data models.ComponentList `json:"data"`
+// normalizeComponent converts a K8s-style OpenChoreo component into the flat
+// model returned to callers.
+func normalizeComponent(comp ocComponent) models.Component {
+	ann := comp.Metadata.Annotations
+	labels := comp.Metadata.Labels
+
+	var displayName, description string
+	if ann != nil {
+		displayName = ann["openchoreo.dev/display-name"]
+		description = ann["openchoreo.dev/description"]
+	}
+
+	var projectName string
+	if comp.Spec.Owner != nil {
+		projectName = comp.Spec.Owner.ProjectName
+	}
+	if projectName == "" && labels != nil {
+		projectName = labels["openchoreo.dev/project-name"]
+	}
+
+	var componentType string
+	if comp.Spec.ComponentType != nil {
+		componentType = comp.Spec.ComponentType.Name
+	}
+	if componentType == "" && labels != nil {
+		componentType = labels["openchoreo.dev/component-type"]
+	}
+
+	return models.Component{
+		UID:         comp.Metadata.UID,
+		Name:        comp.Metadata.Name,
+		ProjectName: projectName,
+		DisplayName: displayName,
+		Description: description,
+		Type:        componentType,
+		AutoDeploy:  comp.Spec.AutoDeploy,
+		CreatedAt:   comp.Metadata.CreationTimestamp,
+		Status:      latestConditionReason(comp.Status.Conditions),
+	}
 }
 
-// platformComponentResponse is the envelope for single-component responses.
-type platformComponentResponse struct {
-	Data models.Component `json:"data"`
+// normalizeWorkflowRun converts a K8s-style OpenChoreo workflow run into the
+// flat model returned to callers.
+func normalizeWorkflowRun(run ocWorkflowRun) models.WorkflowRun {
+	labels := run.Metadata.Labels
+	var componentName, projectName string
+	if labels != nil {
+		componentName = labels["openchoreo.dev/component"]
+		projectName = labels["openchoreo.dev/project"]
+	}
+
+	// Determine status from conditions:
+	// - WorkflowCompleted reason if present
+	// - "Running" if WorkflowRunning condition is True
+	// - else "Pending"
+	status := "Pending"
+	for _, c := range run.Status.Conditions {
+		if c.Type == "WorkflowCompleted" && c.Reason != "" {
+			status = c.Reason
+			break
+		}
+		if c.Type == "WorkflowRunning" && c.Status == "True" {
+			status = "Running"
+		}
+	}
+
+	// Extract image from publish-image task output and commit from checkout-source
+	var image, commit string
+	for _, task := range run.Status.Tasks {
+		if task.Outputs == nil {
+			continue
+		}
+		switch task.Name {
+		case "publish-image":
+			for _, p := range task.Outputs.Parameters {
+				if p.Name == "image" {
+					image = p.Value
+				}
+			}
+		case "checkout-source":
+			for _, p := range task.Outputs.Parameters {
+				if p.Name == "git-revision" {
+					commit = p.Value
+				}
+			}
+		}
+	}
+
+	return models.WorkflowRun{
+		Name:          run.Metadata.Name,
+		Status:        status,
+		StartedAt:     run.Metadata.CreationTimestamp,
+		ComponentName: componentName,
+		ProjectName:   projectName,
+		Image:         image,
+		Commit:        commit,
+	}
 }
 
-// platformWorkflowRunResponse is the envelope for workflow run responses.
-type platformWorkflowRunResponse struct {
-	Data models.WorkflowRun `json:"data"`
+// buildCreateComponentBody converts a flat CreateComponentRequest into the
+// K8s-style body expected by the OpenChoreo API.
+func buildCreateComponentBody(projectName string, req *models.CreateComponentRequest) ocComponent {
+	body := ocComponent{
+		Metadata: ocObjectMeta{
+			Name: req.Name,
+		},
+		Spec: ocComponentSpec{
+			Owner:      &ocOwner{ProjectName: projectName},
+			AutoDeploy: req.AutoDeploy,
+		},
+	}
+
+	if req.DisplayName != "" || req.Description != "" {
+		body.Metadata.Annotations = map[string]string{}
+		if req.DisplayName != "" {
+			body.Metadata.Annotations["openchoreo.dev/display-name"] = req.DisplayName
+		}
+		if req.Description != "" {
+			body.Metadata.Annotations["openchoreo.dev/description"] = req.Description
+		}
+	}
+
+	if req.ComponentType != "" {
+		body.Spec.ComponentType = &ocComponentTypeRef{
+			Kind: "ClusterComponentType",
+			Name: req.ComponentType,
+		}
+	} else if req.Type != "" {
+		body.Spec.ComponentType = &ocComponentTypeRef{
+			Kind: "ClusterComponentType",
+			Name: req.Type,
+		}
+	}
+
+	if req.Workflow != nil {
+		body.Spec.Workflow = buildOcWorkflow(req.Workflow)
+	}
+
+	return body
 }
 
-// platformWorkflowRunListResponse is the envelope for workflow run list responses.
-type platformWorkflowRunListResponse struct {
-	Data models.WorkflowRunList `json:"data"`
+// buildOcWorkflow converts a flat ComponentWorkflowConfig into the K8s-style
+// workflow embedded in a component or workflow run spec.
+func buildOcWorkflow(wf *models.ComponentWorkflowConfig) *ocWorkflow {
+	if wf == nil {
+		return nil
+	}
+	ow := &ocWorkflow{
+		Kind: "ClusterWorkflow",
+		Name: wf.Name,
+	}
+	if wf.SystemParameters != nil && wf.SystemParameters.Repository != nil {
+		repo := wf.SystemParameters.Repository
+		ow.Parameters = &ocWorkflowParameters{
+			Repository: &ocWorkflowRepository{
+				URL:     repo.URL,
+				AppPath: repo.AppPath,
+			},
+		}
+		if repo.Revision != nil {
+			ow.Parameters.Repository.Revision = &ocWorkflowRevision{
+				Branch: repo.Revision.Branch,
+				Commit: repo.Revision.Commit,
+			}
+		}
+	}
+	return ow
 }
 
-// ListComponents returns all components belonging to the given project.
+// ListComponents returns all components belonging to the given project,
+// using a label selector to filter by project name.
 func (c *componentClient) ListComponents(ctx context.Context, _, projectName string, limit int, cursor string) (*models.ComponentList, error) {
-	req := c.newRequest(ctx, "openchoreo.ListComponents", http.MethodGet, c.componentsURL(projectName))
+	req := c.newRequest(ctx, "openchoreo.ListComponents", http.MethodGet, c.componentsURL())
+	req.SetQuery("labelSelector", fmt.Sprintf("openchoreo.dev/project=%s", projectName))
 	if limit > 0 {
 		req.SetQuery("limit", fmt.Sprintf("%d", limit))
 	}
@@ -88,58 +240,97 @@ func (c *componentClient) ListComponents(ctx context.Context, _, projectName str
 	}
 
 	result := requests.SendRequest(ctx, c.httpClient, req)
-	var envelope platformComponentListResponse
-	if err := result.ScanResponse(&envelope, http.StatusOK); err != nil {
+	var raw ocComponentList
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
 		return nil, fmt.Errorf("list components: %w", err)
 	}
-	return &envelope.Data, nil
+
+	items := make([]models.Component, len(raw.Items))
+	for i, comp := range raw.Items {
+		items[i] = normalizeComponent(comp)
+	}
+	return &models.ComponentList{Items: items}, nil
 }
 
-// CreateComponent creates a component in the platform-api-service.
-// The request body is forwarded as-is (same format as the platform-api-service expects).
-// The component is expected to have autoDeploy=true so OpenChoreo automatically deploys
-// it to the default environment once the build succeeds.
+// CreateComponent creates a component in the OpenChoreo API.
 func (c *componentClient) CreateComponent(ctx context.Context, _, projectName string, req *models.CreateComponentRequest) (*models.Component, error) {
-	httpReq := c.newRequest(ctx, "openchoreo.CreateComponent", http.MethodPost, c.componentsURL(projectName))
-	httpReq.SetJSON(req)
+	httpReq := c.newRequest(ctx, "openchoreo.CreateComponent", http.MethodPost, c.componentsURL())
+	httpReq.SetJSON(buildCreateComponentBody(projectName, req))
 
 	result := requests.SendRequest(ctx, c.httpClient, httpReq)
-	var envelope platformComponentResponse
-	if err := result.ScanResponse(&envelope, http.StatusCreated); err != nil {
+	var raw ocComponent
+	if err := result.ScanResponse(&raw, http.StatusCreated); err != nil {
 		return nil, fmt.Errorf("create component: %w", err)
 	}
-	return &envelope.Data, nil
+	comp := normalizeComponent(raw)
+	return &comp, nil
 }
 
-// UpdateBuildParameters patches the component's workflow configuration (repository, build type, parameters).
+// UpdateBuildParameters patches the component's workflow configuration.
 func (c *componentClient) UpdateBuildParameters(ctx context.Context, _, projectName, componentName string, req *models.UpdateBuildParametersRequest) (*models.Component, error) {
-	httpReq := c.newRequest(ctx, "openchoreo.UpdateBuildParameters", http.MethodPut, c.componentURL(projectName, componentName))
-	httpReq.SetJSON(req)
+	body := ocComponent{
+		Metadata: ocObjectMeta{Name: componentName},
+		Spec: ocComponentSpec{
+			Owner:    &ocOwner{ProjectName: projectName},
+			Workflow: buildOcWorkflow(req.Workflow),
+		},
+	}
+
+	httpReq := c.newRequest(ctx, "openchoreo.UpdateBuildParameters", http.MethodPatch, c.componentURL(componentName))
+	httpReq.SetJSON(body)
 
 	result := requests.SendRequest(ctx, c.httpClient, httpReq)
-	var envelope platformComponentResponse
-	if err := result.ScanResponse(&envelope, http.StatusOK); err != nil {
+	var raw ocComponent
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
 		return nil, fmt.Errorf("update build parameters: %w", err)
 	}
-	return &envelope.Data, nil
+	comp := normalizeComponent(raw)
+	return &comp, nil
 }
 
-// TriggerBuild triggers an initial (or manual) build workflow run for the component.
+// TriggerBuild triggers a build workflow run for the component.
+// It first fetches the component to obtain its workflow configuration, then
+// creates a WorkflowRun resource in the OpenChoreo API.
 func (c *componentClient) TriggerBuild(ctx context.Context, _, projectName, componentName string) (*models.WorkflowRun, error) {
-	httpReq := c.newRequest(ctx, "openchoreo.TriggerBuild", http.MethodPost, c.workflowRunsURL(projectName, componentName))
-	httpReq.SetJSON(map[string]any{})
+	// Fetch the component to get its workflow config.
+	getReq := c.newRequest(ctx, "openchoreo.GetComponentForBuild", http.MethodGet, c.componentURL(componentName))
+	getResult := requests.SendRequest(ctx, c.httpClient, getReq)
+	var rawComp ocComponent
+	if err := getResult.ScanResponse(&rawComp, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("get component for build trigger: %w", err)
+	}
+
+	runName := fmt.Sprintf("%s-%d", componentName, time.Now().UnixMilli())
+	body := ocWorkflowRun{
+		Metadata: ocObjectMeta{
+			Name: runName,
+			Labels: map[string]string{
+				"openchoreo.dev/component": componentName,
+				"openchoreo.dev/project":   projectName,
+			},
+		},
+		Spec: ocWorkflowRunSpec{
+			Workflow: rawComp.Spec.Workflow,
+		},
+	}
+
+	httpReq := c.newRequest(ctx, "openchoreo.TriggerBuild", http.MethodPost, c.workflowRunsURL())
+	httpReq.SetJSON(body)
 
 	result := requests.SendRequest(ctx, c.httpClient, httpReq)
-	var envelope platformWorkflowRunResponse
-	if err := result.ScanResponse(&envelope, http.StatusCreated); err != nil {
+	var raw ocWorkflowRun
+	if err := result.ScanResponse(&raw, http.StatusCreated); err != nil {
 		return nil, fmt.Errorf("trigger build: %w", err)
 	}
-	return &envelope.Data, nil
+	run := normalizeWorkflowRun(raw)
+	return &run, nil
 }
 
-// ListWorkflowRuns returns all workflow runs for the given component.
+// ListWorkflowRuns returns all workflow runs for the given component,
+// filtering by the component label.
 func (c *componentClient) ListWorkflowRuns(ctx context.Context, _, projectName, componentName string, limit int, cursor string) (*models.WorkflowRunList, error) {
-	httpReq := c.newRequest(ctx, "openchoreo.ListWorkflowRuns", http.MethodGet, c.workflowRunsURL(projectName, componentName))
+	httpReq := c.newRequest(ctx, "openchoreo.ListWorkflowRuns", http.MethodGet, c.workflowRunsURL())
+	httpReq.SetQuery("labelSelector", fmt.Sprintf("openchoreo.dev/component=%s", componentName))
 	if limit > 0 {
 		httpReq.SetQuery("limit", fmt.Sprintf("%d", limit))
 	}
@@ -148,21 +339,27 @@ func (c *componentClient) ListWorkflowRuns(ctx context.Context, _, projectName, 
 	}
 
 	result := requests.SendRequest(ctx, c.httpClient, httpReq)
-	var envelope platformWorkflowRunListResponse
-	if err := result.ScanResponse(&envelope, http.StatusOK); err != nil {
+	var raw ocWorkflowRunList
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
 		return nil, fmt.Errorf("list workflow runs: %w", err)
 	}
-	return &envelope.Data, nil
+
+	items := make([]models.WorkflowRun, len(raw.Items))
+	for i, run := range raw.Items {
+		items[i] = normalizeWorkflowRun(run)
+	}
+	return &models.WorkflowRunList{Items: items}, nil
 }
 
-// GetWorkflowRun returns a specific workflow run for the given component.
+// GetWorkflowRun returns a specific workflow run by name.
 func (c *componentClient) GetWorkflowRun(ctx context.Context, _, projectName, componentName, runName string) (*models.WorkflowRun, error) {
-	httpReq := c.newRequest(ctx, "openchoreo.GetWorkflowRun", http.MethodGet, c.workflowRunURL(projectName, componentName, runName))
+	httpReq := c.newRequest(ctx, "openchoreo.GetWorkflowRun", http.MethodGet, c.workflowRunURL(runName))
 
 	result := requests.SendRequest(ctx, c.httpClient, httpReq)
-	var envelope platformWorkflowRunResponse
-	if err := result.ScanResponse(&envelope, http.StatusOK); err != nil {
+	var raw ocWorkflowRun
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
 		return nil, fmt.Errorf("get workflow run: %w", err)
 	}
-	return &envelope.Data, nil
+	run := normalizeWorkflowRun(raw)
+	return &run, nil
 }

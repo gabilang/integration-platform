@@ -25,7 +25,7 @@ type projectClient struct {
 }
 
 // NewProjectClient creates a new OpenChoreo project client.
-// baseURL is the OpenChoreo API base URL (e.g. http://host/wso2cloud-dp).
+// baseURL is the OpenChoreo API base URL.
 // The Bearer token is read from the request context on each call.
 func NewProjectClient(baseURL string) ProjectClient {
 	return &projectClient{
@@ -50,14 +50,77 @@ func (c *projectClient) newRequest(ctx context.Context, name, method, url string
 	return req
 }
 
-// platformListResponse is the envelope returned by the platform-api-service for list endpoints.
-type platformListResponse struct {
-	Data models.ProjectList `json:"data"`
+// normalizeProject converts a K8s-style OpenChoreo project into the flat model
+// returned to callers.
+func normalizeProject(p ocProject) models.Project {
+	ann := p.Metadata.Annotations
+	var displayName, description string
+	if ann != nil {
+		displayName = ann["openchoreo.dev/display-name"]
+		description = ann["openchoreo.dev/description"]
+	}
+
+	var deploymentPipeline string
+	if p.Spec.DeploymentPipelineRef != nil {
+		deploymentPipeline = p.Spec.DeploymentPipelineRef.Name
+	}
+
+	return models.Project{
+		UID:                p.Metadata.UID,
+		Name:               p.Metadata.Name,
+		NamespaceName:      p.Metadata.Namespace,
+		DisplayName:        displayName,
+		Description:        description,
+		DeploymentPipeline: deploymentPipeline,
+		CreatedAt:          p.Metadata.CreationTimestamp,
+		Status:             latestConditionReason(p.Status.Conditions),
+	}
 }
 
-// platformItemResponse is the envelope returned by the platform-api-service for single-item endpoints.
-type platformItemResponse struct {
-	Data models.Project `json:"data"`
+// buildCreateProjectBody converts a flat CreateProjectRequest into the K8s-style
+// body expected by the OpenChoreo API.
+func buildCreateProjectBody(req *models.CreateProjectRequest) ocProject {
+	body := ocProject{
+		Metadata: ocObjectMeta{
+			Name: req.Name,
+		},
+	}
+	if req.DisplayName != "" || req.Description != "" {
+		body.Metadata.Annotations = map[string]string{}
+		if req.DisplayName != "" {
+			body.Metadata.Annotations["openchoreo.dev/display-name"] = req.DisplayName
+		}
+		if req.Description != "" {
+			body.Metadata.Annotations["openchoreo.dev/description"] = req.Description
+		}
+	}
+	if req.DeploymentPipeline != "" {
+		body.Spec.DeploymentPipelineRef = &ocRef{Name: req.DeploymentPipeline}
+	}
+	return body
+}
+
+// buildUpdateProjectBody converts a flat UpdateProjectRequest into the K8s-style
+// body expected by the OpenChoreo API.
+func buildUpdateProjectBody(name string, req *models.UpdateProjectRequest) ocProject {
+	body := ocProject{
+		Metadata: ocObjectMeta{
+			Name: name,
+		},
+	}
+	if req.DisplayName != "" || req.Description != "" {
+		body.Metadata.Annotations = map[string]string{}
+		if req.DisplayName != "" {
+			body.Metadata.Annotations["openchoreo.dev/display-name"] = req.DisplayName
+		}
+		if req.Description != "" {
+			body.Metadata.Annotations["openchoreo.dev/description"] = req.Description
+		}
+	}
+	if req.DeploymentPipeline != "" {
+		body.Spec.DeploymentPipelineRef = &ocRef{Name: req.DeploymentPipeline}
+	}
+	return body
 }
 
 func (c *projectClient) ListProjects(ctx context.Context, _ string, limit int, cursor string) (*models.ProjectList, error) {
@@ -70,46 +133,54 @@ func (c *projectClient) ListProjects(ctx context.Context, _ string, limit int, c
 	}
 
 	result := requests.SendRequest(ctx, c.httpClient, req)
-	var envelope platformListResponse
-	if err := result.ScanResponse(&envelope, http.StatusOK); err != nil {
+	var raw ocProjectList
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
-	return &envelope.Data, nil
+
+	items := make([]models.Project, len(raw.Items))
+	for i, p := range raw.Items {
+		items[i] = normalizeProject(p)
+	}
+	return &models.ProjectList{Items: items}, nil
 }
 
 func (c *projectClient) GetProject(ctx context.Context, _, projectName string) (*models.Project, error) {
 	req := c.newRequest(ctx, "openchoreo.GetProject", http.MethodGet, c.projectURL(projectName))
 
 	result := requests.SendRequest(ctx, c.httpClient, req)
-	var envelope platformItemResponse
-	if err := result.ScanResponse(&envelope, http.StatusOK); err != nil {
+	var raw ocProject
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
 		return nil, fmt.Errorf("get project: %w", err)
 	}
-	return &envelope.Data, nil
+	p := normalizeProject(raw)
+	return &p, nil
 }
 
 func (c *projectClient) CreateProject(ctx context.Context, _ string, body *models.CreateProjectRequest) (*models.Project, error) {
 	req := c.newRequest(ctx, "openchoreo.CreateProject", http.MethodPost, c.projectsURL())
-	req.SetJSON(body)
+	req.SetJSON(buildCreateProjectBody(body))
 
 	result := requests.SendRequest(ctx, c.httpClient, req)
-	var envelope platformItemResponse
-	if err := result.ScanResponse(&envelope, http.StatusCreated); err != nil {
+	var raw ocProject
+	if err := result.ScanResponse(&raw, http.StatusCreated); err != nil {
 		return nil, fmt.Errorf("create project: %w", err)
 	}
-	return &envelope.Data, nil
+	p := normalizeProject(raw)
+	return &p, nil
 }
 
 func (c *projectClient) UpdateProject(ctx context.Context, _, projectName string, body *models.UpdateProjectRequest) (*models.Project, error) {
 	req := c.newRequest(ctx, "openchoreo.UpdateProject", http.MethodPut, c.projectURL(projectName))
-	req.SetJSON(body)
+	req.SetJSON(buildUpdateProjectBody(projectName, body))
 
 	result := requests.SendRequest(ctx, c.httpClient, req)
-	var envelope platformItemResponse
-	if err := result.ScanResponse(&envelope, http.StatusOK); err != nil {
+	var raw ocProject
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
 		return nil, fmt.Errorf("update project: %w", err)
 	}
-	return &envelope.Data, nil
+	p := normalizeProject(raw)
+	return &p, nil
 }
 
 func (c *projectClient) DeleteProject(ctx context.Context, _, projectName string) error {

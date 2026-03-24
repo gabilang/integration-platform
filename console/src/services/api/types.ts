@@ -223,6 +223,16 @@ export interface Component extends ObjectMeta {
   };
 }
 
+/** Build workflow configuration for a component. */
+export interface ComponentWorkflowConfig {
+  /** Name of the Workflow or ClusterWorkflow CR to use for builds. */
+  name: string;
+  /** Defaults to 'ClusterWorkflow'. */
+  kind?: string;
+  systemParameters?: WorkflowSystemParameters;
+  parameters?: Record<string, unknown>;
+}
+
 export interface CreateComponentRequest {
   name: string;
   displayName?: string;
@@ -234,6 +244,8 @@ export interface CreateComponentRequest {
   projectName?: string;
   autoBuild?: boolean;
   autoDeploy?: boolean;
+  /** Build workflow configuration (repository, workflow name, parameters). */
+  workflow?: ComponentWorkflowConfig;
   parameters?: Record<string, unknown>;
   traits?: ComponentTrait[];
 }
