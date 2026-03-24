@@ -28,11 +28,11 @@ func main() {
 	setupLogger(cfg.LogLevel)
 
 	// Wire dependencies
-	projectClient := openchoreo.NewProjectClient(cfg.PlatformAPI.BaseURL)
+	projectClient := openchoreo.NewProjectClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
 	projectService := services.NewProjectService(projectClient)
 	projectController := controllers.NewProjectController(projectService)
 
-	componentClient := openchoreo.NewComponentClient(cfg.PlatformAPI.BaseURL)
+	componentClient := openchoreo.NewComponentClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
 	var observClient observability.Client
 	if cfg.Observability.BaseURL != "" {
 		observClient = observability.NewClient(cfg.Observability.BaseURL)

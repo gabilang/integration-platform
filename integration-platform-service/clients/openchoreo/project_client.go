@@ -21,15 +21,18 @@ type ProjectClient interface {
 
 type projectClient struct {
 	baseURL    string
+	hostHeader string
 	httpClient *http.Client
 }
 
 // NewProjectClient creates a new OpenChoreo project client.
-// baseURL is the OpenChoreo API base URL.
+// baseURL is the platform-api-service gateway URL.
+// hostHeader is the Host header required by the data-plane gateway for routing.
 // The Bearer token is read from the request context on each call.
-func NewProjectClient(baseURL string) ProjectClient {
+func NewProjectClient(baseURL, hostHeader string) ProjectClient {
 	return &projectClient{
 		baseURL:    baseURL,
+		hostHeader: hostHeader,
 		httpClient: &http.Client{},
 	}
 }
@@ -46,6 +49,9 @@ func (c *projectClient) newRequest(ctx context.Context, name, method, url string
 	req := requests.NewRequest(name, method, url)
 	if token := middleware.GetAuthToken(ctx); token != "" {
 		req.SetHeader("Authorization", "Bearer "+token)
+	}
+	if c.hostHeader != "" {
+		req.SetHost(c.hostHeader)
 	}
 	return req
 }

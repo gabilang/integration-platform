@@ -23,13 +23,15 @@ type ComponentClient interface {
 
 type componentClient struct {
 	baseURL    string
+	hostHeader string
 	httpClient *http.Client
 }
 
 // NewComponentClient creates a new OpenChoreo component client.
-func NewComponentClient(baseURL string) ComponentClient {
+func NewComponentClient(baseURL, hostHeader string) ComponentClient {
 	return &componentClient{
 		baseURL:    baseURL,
+		hostHeader: hostHeader,
 		httpClient: &http.Client{},
 	}
 }
@@ -54,6 +56,9 @@ func (c *componentClient) newRequest(ctx context.Context, name, method, url stri
 	req := requests.NewRequest(name, method, url)
 	if token := middleware.GetAuthToken(ctx); token != "" {
 		req.SetHeader("Authorization", "Bearer "+token)
+	}
+	if c.hostHeader != "" {
+		req.SetHost(c.hostHeader)
 	}
 	return req
 }

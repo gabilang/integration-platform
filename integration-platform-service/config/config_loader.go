@@ -27,7 +27,8 @@ func Load() (Config, error) {
 		ServerPort: r.readOptionalInt("SERVER_PORT", 8080),
 		LogLevel:   r.readOptionalString("LOG_LEVEL", "info"),
 		PlatformAPI: PlatformAPIConfig{
-			BaseURL: r.readRequiredString("PLATFORM_API_SERVICE_BASE_URL"),
+			BaseURL:    r.readRequiredString("PLATFORM_API_SERVICE_BASE_URL"),
+			HostHeader: r.readOptionalString("PLATFORM_API_SERVICE_HOST", ""),
 		},
 		Observability: ObservabilityConfig{
 			BaseURL: r.readOptionalString("OBSERVABILITY_SERVICE_BASE_URL", ""),

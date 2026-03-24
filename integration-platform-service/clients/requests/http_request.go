@@ -16,6 +16,7 @@ type HttpRequest struct {
 	query   url.Values
 	headers http.Header
 	body    []byte
+	host    string
 }
 
 func NewRequest(name, method, rawURL string) *HttpRequest {
@@ -30,6 +31,14 @@ func NewRequest(name, method, rawURL string) *HttpRequest {
 
 func (r *HttpRequest) SetHeader(key, value string) *HttpRequest {
 	r.headers.Set(key, value)
+	return r
+}
+
+// SetHost overrides the Host header sent to the server. This is required when
+// calling through the data-plane gateway, which uses the Host header to route
+// requests to the correct backend service.
+func (r *HttpRequest) SetHost(host string) *HttpRequest {
+	r.host = host
 	return r
 }
 
@@ -68,6 +77,10 @@ func (r *HttpRequest) Build(ctx context.Context) (*http.Request, error) {
 
 	req.Header = r.headers.Clone()
 	req.Header.Set("Accept", "application/json")
+
+	if r.host != "" {
+		req.Host = r.host
+	}
 
 	return req, nil
 }
