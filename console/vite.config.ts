@@ -21,11 +21,11 @@ export default defineConfig({
       // browser never makes a cross-origin request (mirrors the nginx same-origin
       // proxy used in the Docker/production build).
       '/platform-api-service': {
-        target: 'http://default.development.openchoreoapis.localhost:19080',
+        target: 'http://development-wso2cloud.openchoreoapis.localhost:19080',
         changeOrigin: true,
       },
       '/integration-platform-api-service': {
-        target: 'http://default.development.openchoreoapis.localhost:19080',
+        target: 'http://development-wso2cloud.openchoreoapis.localhost:19080',
         changeOrigin: true,
       },
     },

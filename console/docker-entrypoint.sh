@@ -3,7 +3,7 @@ set -e
 
 echo "🚀 Devant Console - Initializing runtime configuration..."
 
-PLATFORM_API_PROXY_URL="${PLATFORM_API_PROXY_URL:-http://default.development.openchoreoapis.localhost:19080}"
+PLATFORM_API_PROXY_URL="${PLATFORM_API_PROXY_URL:-http://development-wso2cloud.openchoreoapis.localhost:19080}"
 # Hostname used in the proxied request's Host header so the gateway routes correctly.
 # Defaults to the hostname extracted from PLATFORM_API_PROXY_URL.
 PLATFORM_API_HOST="${PLATFORM_API_HOST:-$(echo "$PLATFORM_API_PROXY_URL" | sed 's|^https\?://||' | sed 's|/.*||' | sed 's|:.*||')}"

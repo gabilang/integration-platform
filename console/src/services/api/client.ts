@@ -25,7 +25,7 @@ import { env } from '../../config/env';
  *   /platform-api-service/wso2cloud-dp/{resource-path}
  *
  * For local development a Vite proxy forwards the same prefix to
- *   http://default.development.openchoreoapis.localhost:19080
+ *   http://development-wso2cloud.openchoreoapis.localhost:19080
  *
  * Value is read from the VITE_CORE_DP_API_BASE_URL env / runtime config.
  */

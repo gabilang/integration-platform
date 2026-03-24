@@ -48,6 +48,22 @@ integration-platform-service/
     └── response.go                   # JSON response helpers
 ```
 
+## Gateway Route Path
+
+When deployed to OpenChoreo, the external gateway route path is auto-generated from the **component name** and the **endpoint name** defined in `workload.yaml`:
+
+```
+/{component-name}-{endpoint-name}
+```
+
+For this service, `workload.yaml` defines `name: integration-platform-api-http`, so the full gateway path becomes:
+
+```
+/integration-platform-api-service-integration-platform-api-http
+```
+
+The gateway then rewrites this prefix to the service's internal base path (`/integration-platform-api/v1.0`) before forwarding to the pod.
+
 ## API Endpoints
 
 ### Health
@@ -118,7 +134,7 @@ kubectl rollout status deployment/integration-platform-api-service-development-f
 
 Test via the gateway as normal:
 ```bash
-curl 'http://default.development.openchoreoapis.localhost:19080/integration-platform-api-service/projects' \
+curl 'http://development-wso2cloud.openchoreoapis.localhost:19080/integration-platform-api-service/projects' \
   -H 'Authorization: Bearer <your-token>'
 ```
 
