@@ -15,11 +15,9 @@ type AppParams struct {
 	ComponentController controllers.ComponentController
 }
 
-// APIPrefix is the base path for all API routes. The OpenChoreo gateway rewrites
-// the external route prefix to this value before forwarding to the service.
-const APIPrefix = "/integration-platform-api/v1.0"
-
 // NewHandler assembles the full HTTP handler with middleware and routes.
+// The internal API gateway strips the context path (/integration-platform-api/v1.0)
+// before forwarding, so routes are registered at root level.
 func NewHandler(params AppParams) http.Handler {
 	mux := http.NewServeMux()
 
@@ -34,9 +32,7 @@ func NewHandler(params AppParams) http.Handler {
 	registerProjectRoutes(apiMux, params.ProjectController)
 	registerComponentRoutes(apiMux, params.ComponentController)
 
-	// Strip the API prefix so route patterns in apiMux match without it.
-	stripped := http.StripPrefix(APIPrefix, apiMux)
-	mux.Handle(APIPrefix+"/", jwtmw.Middleware(stripped))
+	mux.Handle("/", jwtmw.Middleware(apiMux))
 
 	// Global middleware stack (outermost applied last)
 	var handler http.Handler = mux

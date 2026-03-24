@@ -31,7 +31,6 @@ integration-platform-service/
 │   └── component_controller.go       # HTTP handlers for component endpoints
 ├── middleware/
 │   ├── auth_token.go                 # Bearer token extraction
-│   ├── cors.go                       # CORS middleware
 │   ├── correlation_id.go             # Correlation ID propagation
 │   ├── panic_recover.go              # Panic recovery
 │   ├── jwt/
@@ -105,7 +104,6 @@ Configuration is loaded from environment variables. Set `ENV_FILE_PATH` to point
 | `SERVER_HOST`                   | No       | `0.0.0.0` | Server bind address                                                         |
 | `SERVER_PORT`                   | No       | `8080`    | Server port                                                                 |
 | `LOG_LEVEL`                     | No       | `info`    | Log level: `debug`, `info`, `warn`, `error`                                 |
-| `CORS_ALLOWED_ORIGINS`          | No       | `*`       | Allowed CORS origins                                                        |
 | `ENV_FILE_PATH`                 | No       | —         | Path to a `.env` file                                                       |
 
 ## Testing Changes Locally (Without GitHub CI)
