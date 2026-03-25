@@ -38,7 +38,7 @@ func (c *componentController) ListComponents(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	org := claims.OrgHandle
-	projectName := r.PathValue("projectName")
+	projectName := r.URL.Query().Get("projectName")
 	cursor := r.URL.Query().Get("cursor")
 
 	list, err := c.service.ListComponents(r.Context(), org, projectName, 100, cursor)
@@ -63,16 +63,20 @@ func (c *componentController) CreateComponent(w http.ResponseWriter, r *http.Req
 		return
 	}
 	org := claims.OrgHandle
-	projectName := r.PathValue("projectName")
 
 	var req models.CreateComponentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.Name == "" {
-		utils.WriteErrorResponse(w, http.StatusBadRequest, "name is required")
+	if req.Metadata.Name == "" {
+		utils.WriteErrorResponse(w, http.StatusBadRequest, "metadata.name is required")
 		return
+	}
+
+	projectName := ""
+	if req.Spec.Owner != nil {
+		projectName = req.Spec.Owner.ProjectName
 	}
 
 	resp, err := c.service.CreateComponent(r.Context(), org, projectName, &req)
@@ -97,8 +101,8 @@ func (c *componentController) UpdateBuildParameters(w http.ResponseWriter, r *ht
 		return
 	}
 	org := claims.OrgHandle
-	projectName := r.PathValue("projectName")
 	componentName := r.PathValue("componentName")
+	projectName := r.URL.Query().Get("projectName")
 
 	var req models.UpdateBuildParametersRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -136,8 +140,8 @@ func (c *componentController) TriggerBuild(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	org := claims.OrgHandle
-	projectName := r.PathValue("projectName")
 	componentName := r.PathValue("componentName")
+	projectName := r.URL.Query().Get("projectName")
 
 	run, err := c.service.TriggerBuild(r.Context(), org, projectName, componentName)
 	if err != nil {
@@ -165,8 +169,8 @@ func (c *componentController) ListBuilds(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	org := claims.OrgHandle
-	projectName := r.PathValue("projectName")
 	componentName := r.PathValue("componentName")
+	projectName := r.URL.Query().Get("projectName")
 	cursor := r.URL.Query().Get("cursor")
 
 	list, err := c.service.ListBuilds(r.Context(), org, projectName, componentName, 20, cursor)
@@ -191,9 +195,9 @@ func (c *componentController) GetBuildStatus(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	org := claims.OrgHandle
-	projectName := r.PathValue("projectName")
 	componentName := r.PathValue("componentName")
 	buildName := r.PathValue("buildName")
+	projectName := r.URL.Query().Get("projectName")
 
 	run, err := c.service.GetBuildStatus(r.Context(), org, projectName, componentName, buildName)
 	if err != nil {
@@ -221,9 +225,9 @@ func (c *componentController) GetBuildLogs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	org := claims.OrgHandle
-	projectName := r.PathValue("projectName")
 	componentName := r.PathValue("componentName")
 	buildName := r.PathValue("buildName")
+	projectName := r.URL.Query().Get("projectName")
 
 	logs, err := c.service.GetBuildLogs(r.Context(), org, projectName, componentName, buildName)
 	if err != nil {

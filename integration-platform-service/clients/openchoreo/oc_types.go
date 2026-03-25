@@ -88,6 +88,7 @@ type ocComponentSpec struct {
 	Owner         *ocOwner            `json:"owner,omitempty"`
 	ComponentType *ocComponentTypeRef `json:"componentType,omitempty"`
 	AutoDeploy    bool                `json:"autoDeploy,omitempty"`
+	AutoBuild     bool                `json:"autoBuild,omitempty"`
 	Workflow      *ocWorkflow         `json:"workflow,omitempty"`
 }
 

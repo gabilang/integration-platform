@@ -9,6 +9,7 @@ type Component struct {
 	Description string `json:"description,omitempty"`
 	Type        string `json:"type,omitempty"`
 	AutoDeploy  bool   `json:"autoDeploy,omitempty"`
+	AutoBuild   bool   `json:"autoBuild,omitempty"`
 	CreatedAt   string `json:"createdAt,omitempty"`
 	Status      string `json:"status,omitempty"`
 }
@@ -65,35 +66,56 @@ type WorkflowRepository struct {
 	AppPath  string            `json:"appPath,omitempty"`
 }
 
-// WorkflowSystemParameters holds system-level parameters for a component workflow.
-type WorkflowSystemParameters struct {
-	Repository *WorkflowRepository `json:"repository,omitempty"`
-}
-
-// ComponentWorkflowConfig is the workflow configuration embedded in a component.
-type ComponentWorkflowConfig struct {
-	Name             string                    `json:"name,omitempty"`
-	SystemParameters *WorkflowSystemParameters `json:"systemParameters,omitempty"`
-	Parameters       map[string]any            `json:"parameters,omitempty"`
-}
-
 // UpdateBuildParametersRequest holds the fields that can be changed after a component is created.
 // Only the workflow configuration (repository, build type, parameters) is mutable.
 type UpdateBuildParametersRequest struct {
-	Workflow *ComponentWorkflowConfig `json:"workflow"`
+	Workflow *ComponentWorkflowSpec `json:"workflow"`
 }
 
-// CreateComponentRequest matches the platform-api-service component creation format.
-// The body is forwarded as-is after extracting the component name for routing.
+// CreateComponentRequest is the K8s-style body sent by the frontend and
+// forwarded to the OpenChoreo API. The structure mirrors the OpenChoreo
+// Component resource.
 type CreateComponentRequest struct {
-	Name          string                   `json:"name"`
-	DisplayName   string                   `json:"displayName,omitempty"`
-	Description   string                   `json:"description,omitempty"`
-	Type          string                   `json:"type,omitempty"`
-	ComponentType string                   `json:"componentType,omitempty"`
-	AutoDeploy    bool                     `json:"autoDeploy,omitempty"`
-	Workflow      *ComponentWorkflowConfig `json:"workflow,omitempty"`
-	Parameters    map[string]any           `json:"parameters,omitempty"`
+	Metadata ComponentMetadata `json:"metadata"`
+	Spec     ComponentSpec     `json:"spec"`
+}
+
+// ComponentMetadata holds the metadata portion of a component create request.
+type ComponentMetadata struct {
+	Name        string            `json:"name"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+// ComponentSpec holds the spec portion of a component create request.
+type ComponentSpec struct {
+	Owner         *ComponentOwner         `json:"owner,omitempty"`
+	ComponentType *ComponentTypeRef       `json:"componentType,omitempty"`
+	AutoDeploy    bool                    `json:"autoDeploy,omitempty"`
+	AutoBuild     bool                    `json:"autoBuild,omitempty"`
+	Workflow      *ComponentWorkflowSpec  `json:"workflow,omitempty"`
+}
+
+// ComponentOwner identifies the project that owns the component.
+type ComponentOwner struct {
+	ProjectName string `json:"projectName"`
+}
+
+// ComponentTypeRef references a ClusterComponentType.
+type ComponentTypeRef struct {
+	Kind string `json:"kind,omitempty"`
+	Name string `json:"name"`
+}
+
+// ComponentWorkflowSpec is the K8s-style workflow embedded in a component spec.
+type ComponentWorkflowSpec struct {
+	Kind       string                      `json:"kind,omitempty"`
+	Name       string                      `json:"name,omitempty"`
+	Parameters *ComponentWorkflowParameters `json:"parameters,omitempty"`
+}
+
+// ComponentWorkflowParameters holds workflow parameters (repository config).
+type ComponentWorkflowParameters struct {
+	Repository *WorkflowRepository `json:"repository,omitempty"`
 }
 
 // CreateComponentResponse is returned after the component is created and the

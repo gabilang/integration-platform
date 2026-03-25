@@ -9,4 +9,3 @@ endpoints:
       - external
     port: 8080
     type: REST
-    basePath: /

@@ -7,11 +7,11 @@ import (
 )
 
 func registerComponentRoutes(mux *http.ServeMux, c controllers.ComponentController) {
-	mux.HandleFunc("GET /projects/{projectName}/components", c.ListComponents)
-	mux.HandleFunc("POST /projects/{projectName}/components", c.CreateComponent)
-	mux.HandleFunc("PUT /projects/{projectName}/components/{componentName}/build-parameters", c.UpdateBuildParameters)
-	mux.HandleFunc("POST /projects/{projectName}/components/{componentName}/builds", c.TriggerBuild)
-	mux.HandleFunc("GET /projects/{projectName}/components/{componentName}/builds", c.ListBuilds)
-	mux.HandleFunc("GET /projects/{projectName}/components/{componentName}/builds/{buildName}", c.GetBuildStatus)
-	mux.HandleFunc("GET /projects/{projectName}/components/{componentName}/builds/{buildName}/logs", c.GetBuildLogs)
+	mux.HandleFunc("GET /components", c.ListComponents)
+	mux.HandleFunc("POST /components", c.CreateComponent)
+	mux.HandleFunc("PUT /components/{componentName}/build-parameters", c.UpdateBuildParameters)
+	mux.HandleFunc("POST /components/{componentName}/builds", c.TriggerBuild)
+	mux.HandleFunc("GET /components/{componentName}/builds", c.ListBuilds)
+	mux.HandleFunc("GET /components/{componentName}/builds/{buildName}", c.GetBuildStatus)
+	mux.HandleFunc("GET /components/{componentName}/builds/{buildName}/logs", c.GetBuildLogs)
 }

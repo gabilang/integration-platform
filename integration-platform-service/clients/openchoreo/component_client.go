@@ -99,6 +99,7 @@ func normalizeComponent(comp ocComponent) models.Component {
 		Description: description,
 		Type:        componentType,
 		AutoDeploy:  comp.Spec.AutoDeploy,
+		AutoBuild:   comp.Spec.AutoBuild,
 		CreatedAt:   comp.Metadata.CreationTimestamp,
 		Status:      latestConditionReason(comp.Status.Conditions),
 	}
@@ -162,76 +163,6 @@ func normalizeWorkflowRun(run ocWorkflowRun) models.WorkflowRun {
 	}
 }
 
-// buildCreateComponentBody converts a flat CreateComponentRequest into the
-// K8s-style body expected by the OpenChoreo API.
-func buildCreateComponentBody(projectName string, req *models.CreateComponentRequest) ocComponent {
-	body := ocComponent{
-		Metadata: ocObjectMeta{
-			Name: req.Name,
-		},
-		Spec: ocComponentSpec{
-			Owner:      &ocOwner{ProjectName: projectName},
-			AutoDeploy: req.AutoDeploy,
-		},
-	}
-
-	if req.DisplayName != "" || req.Description != "" {
-		body.Metadata.Annotations = map[string]string{}
-		if req.DisplayName != "" {
-			body.Metadata.Annotations["openchoreo.dev/display-name"] = req.DisplayName
-		}
-		if req.Description != "" {
-			body.Metadata.Annotations["openchoreo.dev/description"] = req.Description
-		}
-	}
-
-	if req.ComponentType != "" {
-		body.Spec.ComponentType = &ocComponentTypeRef{
-			Kind: "ClusterComponentType",
-			Name: req.ComponentType,
-		}
-	} else if req.Type != "" {
-		body.Spec.ComponentType = &ocComponentTypeRef{
-			Kind: "ClusterComponentType",
-			Name: req.Type,
-		}
-	}
-
-	if req.Workflow != nil {
-		body.Spec.Workflow = buildOcWorkflow(req.Workflow)
-	}
-
-	return body
-}
-
-// buildOcWorkflow converts a flat ComponentWorkflowConfig into the K8s-style
-// workflow embedded in a component or workflow run spec.
-func buildOcWorkflow(wf *models.ComponentWorkflowConfig) *ocWorkflow {
-	if wf == nil {
-		return nil
-	}
-	ow := &ocWorkflow{
-		Kind: "ClusterWorkflow",
-		Name: wf.Name,
-	}
-	if wf.SystemParameters != nil && wf.SystemParameters.Repository != nil {
-		repo := wf.SystemParameters.Repository
-		ow.Parameters = &ocWorkflowParameters{
-			Repository: &ocWorkflowRepository{
-				URL:     repo.URL,
-				AppPath: repo.AppPath,
-			},
-		}
-		if repo.Revision != nil {
-			ow.Parameters.Repository.Revision = &ocWorkflowRevision{
-				Branch: repo.Revision.Branch,
-				Commit: repo.Revision.Commit,
-			}
-		}
-	}
-	return ow
-}
-
 // ListComponents returns all components belonging to the given project,
 // using a label selector to filter by project name.
 func (c *componentClient) ListComponents(ctx context.Context, _, projectName string, limit int, cursor string) (*models.ComponentList, error) {
@@ -258,9 +189,11 @@ func (c *componentClient) ListComponents(ctx context.Context, _, projectName str
 }
 
 // CreateComponent creates a component in the OpenChoreo API.
+// The request body is forwarded as-is since it already matches the K8s-style
+// format expected by the OpenChoreo API.
 func (c *componentClient) CreateComponent(ctx context.Context, _, projectName string, req *models.CreateComponentRequest) (*models.Component, error) {
 	httpReq := c.newRequest(ctx, "openchoreo.CreateComponent", http.MethodPost, c.componentsURL())
-	httpReq.SetJSON(buildCreateComponentBody(projectName, req))
+	httpReq.SetJSON(req)
 
 	result := requests.SendRequest(ctx, c.httpClient, httpReq)
 	var raw ocComponent
@@ -276,9 +209,29 @@ func (c *componentClient) UpdateBuildParameters(ctx context.Context, _, projectN
 	body := ocComponent{
 		Metadata: ocObjectMeta{Name: componentName},
 		Spec: ocComponentSpec{
-			Owner:    &ocOwner{ProjectName: projectName},
-			Workflow: buildOcWorkflow(req.Workflow),
+			Owner: &ocOwner{ProjectName: projectName},
 		},
+	}
+	if req.Workflow != nil {
+		body.Spec.Workflow = &ocWorkflow{
+			Kind: req.Workflow.Kind,
+			Name: req.Workflow.Name,
+		}
+		if req.Workflow.Parameters != nil && req.Workflow.Parameters.Repository != nil {
+			repo := req.Workflow.Parameters.Repository
+			body.Spec.Workflow.Parameters = &ocWorkflowParameters{
+				Repository: &ocWorkflowRepository{
+					URL:     repo.URL,
+					AppPath: repo.AppPath,
+				},
+			}
+			if repo.Revision != nil {
+				body.Spec.Workflow.Parameters.Repository.Revision = &ocWorkflowRevision{
+					Branch: repo.Revision.Branch,
+					Commit: repo.Revision.Commit,
+				}
+			}
+		}
 	}
 
 	httpReq := c.newRequest(ctx, "openchoreo.UpdateBuildParameters", http.MethodPatch, c.componentURL(componentName))

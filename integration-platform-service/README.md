@@ -61,7 +61,7 @@ For this service, `workload.yaml` defines `name: integration-platform-api-http`,
 /integration-platform-api-service-integration-platform-api-http
 ```
 
-The gateway then rewrites this prefix to the service's internal base path (`/integration-platform-api/v1.0`) before forwarding to the pod.
+The external gateway rewrites this prefix to `/integration-platform-api/v1.0`, then the internal API gateway (policy engine) strips that context path before forwarding to the pod. As a result, the Go service receives requests at root level (e.g. `/projects`, `/health`).
 
 ## API Endpoints
 
@@ -123,16 +123,16 @@ docker push localhost:10082/devant-integration-platform-api-service-image:dev-lo
 # 3. Patch the running deployment to use the new image
 kubectl set image deployment/integration-platform-api-service-development-f21e1891 \
   main=host.k3d.internal:10082/devant-integration-platform-api-service-image:dev-local \
-  -n dp-default-devant-development-f57c8f69
+  -n dp-wso2cloud-devant-development-0bea7a4d
 
 # 4. Wait for rollout
 kubectl rollout status deployment/integration-platform-api-service-development-f21e1891 \
-  -n dp-default-devant-development-f57c8f69
+  -n dp-wso2cloud-devant-development-0bea7a4d
 ```
 
 Test via the gateway as normal:
 ```bash
-curl 'http://development-wso2cloud.openchoreoapis.localhost:19080/integration-platform-api-service/projects' \
+curl 'http://development-wso2cloud.openchoreoapis.localhost:19080/integration-platform-api-service-integration-platform-api-http/projects' \
   -H 'Authorization: Bearer <your-token>'
 ```
 
@@ -140,7 +140,7 @@ To restore the original image when done:
 ```bash
 kubectl set image deployment/integration-platform-api-service-development-f21e1891 \
   main=host.k3d.internal:10082/devant-integration-platform-api-service-image:v1-486a7431 \
-  -n dp-default-devant-development-f57c8f69
+  -n dp-wso2cloud-devant-development-0bea7a4d
 ```
 
 ---

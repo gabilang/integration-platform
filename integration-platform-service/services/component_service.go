@@ -47,24 +47,26 @@ func (s *componentService) ListComponents(ctx context.Context, orgName, projectN
 	return list, nil
 }
 
-// CreateComponent creates the component and triggers its initial build.
-// If the build trigger fails the component is still returned — the caller can
-// retry the build later.
+// CreateComponent creates the component. If autoBuild is enabled in the request,
+// it also triggers the initial build. If the build trigger fails the component
+// is still returned — the caller can retry the build later.
 func (s *componentService) CreateComponent(ctx context.Context, orgName, projectName string, req *models.CreateComponentRequest) (*models.CreateComponentResponse, error) {
 	component, err := s.client.CreateComponent(ctx, orgName, projectName, req)
 	if err != nil {
 		return nil, translateComponentHTTPError(err)
 	}
 
-	buildRun, err := s.client.TriggerBuild(ctx, orgName, projectName, component.Name)
-	if err != nil {
-		// Log but don't fail — component was created successfully.
-		slog.WarnContext(ctx, "initial build trigger failed",
-			"error", err,
-			"org", orgName,
-			"project", projectName,
-			"component", component.Name,
-		)
+	var buildRun *models.WorkflowRun
+	if req.Spec.AutoBuild {
+		buildRun, err = s.client.TriggerBuild(ctx, orgName, projectName, component.Name)
+		if err != nil {
+			slog.WarnContext(ctx, "initial build trigger failed",
+				"error", err,
+				"org", orgName,
+				"project", projectName,
+				"component", component.Name,
+			)
+		}
 	}
 
 	return &models.CreateComponentResponse{
